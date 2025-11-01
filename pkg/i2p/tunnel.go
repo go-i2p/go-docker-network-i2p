@@ -344,7 +344,8 @@ func (tm *TunnelManager) createClientTunnel(tunnel *Tunnel) error {
 	}
 
 	// Generate a unique sub-session ID for this tunnel
-	subSessionID := fmt.Sprintf("%s-client", config.Name)
+	// Include port number to ensure uniqueness across multiple tunnels for same container
+	subSessionID := fmt.Sprintf("%s-client-port%d", config.Name, config.LocalPort)
 
 	log.Printf("Creating client tunnel %s for container %s (destination: %s)",
 		config.Name, config.ContainerID, config.Destination)
@@ -377,7 +378,8 @@ func (tm *TunnelManager) createServerTunnel(tunnel *Tunnel) error {
 	}
 
 	// Generate a unique sub-session ID for this tunnel
-	subSessionID := fmt.Sprintf("%s-server", config.Name)
+	// Include port number to ensure uniqueness across multiple tunnels for same container
+	subSessionID := fmt.Sprintf("%s-server-port%d", config.Name, config.LocalPort)
 
 	log.Printf("Creating server tunnel %s for container %s on %s",
 		config.Name, config.ContainerID, tunnel.GetLocalEndpoint())
