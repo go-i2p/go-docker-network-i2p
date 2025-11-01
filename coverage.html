@@ -1,0 +1,1474 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>plugin: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/go-i2p/go-docker-network-i2p/pkg/plugin/handlers.go (54.7%)</option>
+				
+				<option value="file1">github.com/go-i2p/go-docker-network-i2p/pkg/plugin/ipam.go (43.3%)</option>
+				
+				<option value="file2">github.com/go-i2p/go-docker-network-i2p/pkg/plugin/network.go (72.2%)</option>
+				
+				<option value="file3">github.com/go-i2p/go-docker-network-i2p/pkg/plugin/plugin.go (81.7%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package plugin
+
+import (
+        "log"
+        "net/http"
+        "strings"
+)
+
+// handleGetCapabilities returns the capabilities of the network driver.
+//
+// This tells Docker what features this network plugin supports.
+// For I2P networks, we support local scope networking.
+func (p *Plugin) handleGetCapabilities(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received NetworkDriver.GetCapabilities request")
+
+        response := CapabilitiesResponse{
+                Scope:             "local",
+                ConnectivityScope: "local",
+                ErrorResponse:     ErrorResponse{Err: ""},
+        }
+
+        p.writeJSONResponse(w, response)
+}</span>
+
+// handleCreateNetwork creates a new I2P network.
+//
+// This is called when 'docker network create' is used with our driver.
+// We'll set up the I2P network infrastructure here.
+func (p *Plugin) handleCreateNetwork(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received NetworkDriver.CreateNetwork request")
+
+        var req CreateNetworkRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov8" title="1">{
+                log.Printf("Error parsing CreateNetwork request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Creating network %s", req.NetworkID)
+
+        // Use the network manager to create the network
+        if err := p.networkMgr.CreateNetwork(req.NetworkID, req.Options, req.IPv4Data); err != nil </span><span class="cov8" title="1">{
+                log.Printf("Error creating network %s: %v", req.NetworkID, err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Successfully created network %s", req.NetworkID)
+        p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// handleDeleteNetwork removes an I2P network.
+//
+// This cleans up I2P tunnels and network resources when the network is deleted.
+func (p *Plugin) handleDeleteNetwork(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received NetworkDriver.DeleteNetwork request")
+
+        var req DeleteNetworkRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing DeleteNetwork request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Deleting network %s", req.NetworkID)
+
+        // Use the network manager to delete the network
+        if err := p.networkMgr.DeleteNetwork(req.NetworkID); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error deleting network %s: %v", req.NetworkID, err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Successfully deleted network %s", req.NetworkID)
+        p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// handleCreateEndpoint creates a new endpoint for a container.
+//
+// This sets up I2P connectivity for a specific container on the network.
+func (p *Plugin) handleCreateEndpoint(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received NetworkDriver.CreateEndpoint request")
+
+        var req CreateEndpointRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing CreateEndpoint request: %v", err)
+                p.writeJSONResponse(w, CreateEndpointResponse{
+                        ErrorResponse: ErrorResponse{Err: err.Error()},
+                })
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Creating endpoint %s on network %s", req.EndpointID, req.NetworkID)
+
+        // Use the network manager to create the endpoint
+        endpoint, err := p.networkMgr.CreateEndpoint(req.NetworkID, req.EndpointID, req.Options)
+        if err != nil </span><span class="cov8" title="1">{
+                log.Printf("Error creating endpoint %s: %v", req.EndpointID, err)
+                p.writeJSONResponse(w, CreateEndpointResponse{
+                        ErrorResponse: ErrorResponse{Err: err.Error()},
+                })
+                return
+        }</span>
+
+        // Prepare the response with endpoint interface information
+        <span class="cov8" title="1">response := CreateEndpointResponse{
+                Interface: &amp;EndpointInterface{
+                        MacAddress: endpoint.MacAddress,
+                        Address:    endpoint.IPAddress.String() + "/" + "24", // Include CIDR notation
+                },
+                ErrorResponse: ErrorResponse{Err: ""},
+        }
+
+        log.Printf("Successfully created endpoint %s on network %s", req.EndpointID, req.NetworkID)
+        p.writeJSONResponse(w, response)</span>
+}
+
+// handleDeleteEndpoint removes a container endpoint.
+//
+// This cleans up I2P resources for a specific container.
+func (p *Plugin) handleDeleteEndpoint(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received NetworkDriver.DeleteEndpoint request")
+
+        var req DeleteEndpointRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing DeleteEndpoint request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Deleting endpoint %s on network %s", req.EndpointID, req.NetworkID)
+
+        // Use the network manager to delete the endpoint
+        if err := p.networkMgr.DeleteEndpoint(req.NetworkID, req.EndpointID); err != nil </span><span class="cov8" title="1">{
+                log.Printf("Error deleting endpoint %s: %v", req.EndpointID, err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Successfully deleted endpoint %s on network %s", req.EndpointID, req.NetworkID)
+        p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// handleEndpointInfo returns information about an endpoint.
+//
+// This provides Docker with endpoint-specific information.
+func (p *Plugin) handleEndpointInfo(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        log.Println("Received NetworkDriver.EndpointOperInfo request")
+
+        var req EndpointInfoRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing EndpointInfo request: %v", err)
+                p.writeJSONResponse(w, EndpointInfoResponse{
+                        ErrorResponse: ErrorResponse{Err: err.Error()},
+                })
+                return
+        }</span>
+
+        <span class="cov0" title="0">log.Printf("Getting info for endpoint %s on network %s", req.EndpointID, req.NetworkID)
+
+        response := EndpointInfoResponse{
+                Value:         map[string]interface{}{},
+                ErrorResponse: ErrorResponse{Err: ""},
+        }
+
+        p.writeJSONResponse(w, response)</span>
+}
+
+// handleJoin connects a container to the I2P network.
+//
+// This is called when a container is started and needs to join the network.
+func (p *Plugin) handleJoin(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received NetworkDriver.Join request")
+
+        var req JoinRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing Join request: %v", err)
+                p.writeJSONResponse(w, JoinResponse{
+                        ErrorResponse: ErrorResponse{Err: err.Error()},
+                })
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Joining endpoint %s to network %s (sandbox: %s)", req.EndpointID, req.NetworkID, req.SandboxKey)
+
+        // Extract container ID from sandbox key (Docker format: /var/run/docker/netns/&lt;containerID&gt;)
+        containerID := extractContainerID(req.SandboxKey)
+        if containerID == "" </span><span class="cov0" title="0">{
+                containerID = req.SandboxKey // Fallback to using sandbox key directly
+        }</span>
+
+        // Use the network manager to join the endpoint
+        <span class="cov8" title="1">endpoint, err := p.networkMgr.JoinEndpoint(req.NetworkID, req.EndpointID, containerID, req.SandboxKey)
+        if err != nil </span><span class="cov8" title="1">{
+                log.Printf("Error joining endpoint %s: %v", req.EndpointID, err)
+                p.writeJSONResponse(w, JoinResponse{
+                        ErrorResponse: ErrorResponse{Err: err.Error()},
+                })
+                return
+        }</span>
+
+        // Get the network to retrieve gateway information
+        <span class="cov8" title="1">network := p.networkMgr.GetNetwork(req.NetworkID)
+        if network == nil </span><span class="cov0" title="0">{
+                log.Printf("Network %s not found during join", req.NetworkID)
+                p.writeJSONResponse(w, JoinResponse{
+                        ErrorResponse: ErrorResponse{Err: "network not found"},
+                })
+                return
+        }</span>
+
+        // Prepare the response with network configuration
+        <span class="cov8" title="1">response := JoinResponse{
+                InterfaceName: &amp;InterfaceName{
+                        SrcName:   "veth", // Standard Docker veth interface
+                        DstPrefix: "eth",  // Standard container interface prefix
+                },
+                Gateway: network.Gateway.String(),
+                // ResolvConf and DNS can be configured for I2P-specific resolution
+                ErrorResponse: ErrorResponse{Err: ""},
+        }
+
+        log.Printf("Successfully joined endpoint %s to network %s with IP %s",
+                req.EndpointID, req.NetworkID, endpoint.IPAddress.String())
+        p.writeJSONResponse(w, response)</span>
+}
+
+// handleLeave disconnects a container from the I2P network.
+//
+// This is called when a container is stopped and needs to leave the network.
+func (p *Plugin) handleLeave(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received NetworkDriver.Leave request")
+
+        var req LeaveRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing Leave request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Leaving endpoint %s from network %s", req.EndpointID, req.NetworkID)
+
+        // Use the network manager to leave the endpoint
+        err := p.networkMgr.LeaveEndpoint(req.NetworkID, req.EndpointID)
+        if err != nil </span><span class="cov8" title="1">{
+                log.Printf("Error leaving endpoint %s: %v", req.EndpointID, err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Successfully left endpoint %s from network %s", req.EndpointID, req.NetworkID)
+        p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// handleDiscoverNew handles discovery of new nodes.
+//
+// This is used for multi-host networking, which we don't support for I2P.
+func (p *Plugin) handleDiscoverNew(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        log.Println("Received NetworkDriver.DiscoverNew request")
+
+        var req DiscoveryNotification
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing DiscoverNew request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        // I2P networks are local scope, so discovery is not needed
+        <span class="cov0" title="0">p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// handleDiscoverDelete handles removal of discovered nodes.
+//
+// This is used for multi-host networking, which we don't support for I2P.
+func (p *Plugin) handleDiscoverDelete(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        log.Println("Received NetworkDriver.DiscoverDelete request")
+
+        var req DiscoveryNotification
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing DiscoverDelete request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        // I2P networks are local scope, so discovery is not needed
+        <span class="cov0" title="0">p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// handleProgramExternalConnectivity sets up external connectivity.
+//
+// This would typically handle port mapping, but for I2P we handle
+// this through I2P tunnels instead.
+func (p *Plugin) handleProgramExternalConnectivity(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        log.Println("Received NetworkDriver.ProgramExternalConnectivity request")
+
+        var req ExternalConnectivityRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing ProgramExternalConnectivity request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov0" title="0">log.Printf("Programming external connectivity for endpoint %s on network %s", req.EndpointID, req.NetworkID)
+
+        // TODO: Set up I2P server tunnels for exposed ports
+        p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// handleRevokeExternalConnectivity removes external connectivity.
+//
+// This cleans up I2P server tunnels when ports are no longer exposed.
+func (p *Plugin) handleRevokeExternalConnectivity(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        log.Println("Received NetworkDriver.RevokeExternalConnectivity request")
+
+        var req ExternalConnectivityRequest
+        if err := p.readJSONRequest(r, &amp;req); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error parsing RevokeExternalConnectivity request: %v", err)
+                p.writeJSONResponse(w, ErrorResponse{Err: err.Error()})
+                return
+        }</span>
+
+        <span class="cov0" title="0">log.Printf("Revoking external connectivity for endpoint %s on network %s", req.EndpointID, req.NetworkID)
+
+        // TODO: Clean up I2P server tunnels
+        p.writeJSONResponse(w, ErrorResponse{Err: ""})</span>
+}
+
+// extractContainerID extracts the container ID from a Docker sandbox key.
+//
+// Docker sandbox keys are typically in the format:
+// /var/run/docker/netns/&lt;containerID&gt;
+func extractContainerID(sandboxKey string) string <span class="cov8" title="1">{
+        if sandboxKey == "" </span><span class="cov0" title="0">{
+                return ""
+        }</span>
+
+        // Split by '/' and get the last segment
+        <span class="cov8" title="1">parts := strings.Split(sandboxKey, "/")
+        if len(parts) &gt; 0 </span><span class="cov8" title="1">{
+                return parts[len(parts)-1]
+        }</span>
+
+        <span class="cov0" title="0">return sandboxKey</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">// Package plugin provides IP address allocation for I2P Docker networks.
+//
+// This file implements IP address management (IPAM) for containers on I2P networks,
+// ensuring proper allocation and cleanup of IP addresses within network subnets.
+package plugin
+
+import (
+        "fmt"
+        "net"
+        "sync"
+)
+
+// IPAllocator manages IP address allocation within a network subnet.
+//
+// The allocator tracks allocated IP addresses and provides allocation/deallocation
+// operations for container endpoints. It ensures no IP conflicts within a network.
+type IPAllocator struct {
+        // subnet defines the IP address range for allocation
+        subnet *net.IPNet
+
+        // gateway is the gateway IP address (reserved, not allocatable)
+        gateway net.IP
+
+        // allocated tracks which IP addresses are currently in use
+        allocated map[string]bool
+
+        // nextIP tracks the next IP to try for allocation (optimization)
+        nextIP net.IP
+
+        // mutex protects concurrent access to allocation state
+        mutex sync.Mutex
+}
+
+// NewIPAllocator creates a new IP allocator for the given subnet.
+//
+// The allocator will manage IP allocation within the subnet, reserving the
+// gateway address and tracking allocated addresses.
+func NewIPAllocator(subnet *net.IPNet, gateway net.IP) *IPAllocator <span class="cov8" title="1">{
+        allocator := &amp;IPAllocator{
+                subnet:    subnet,
+                gateway:   gateway,
+                allocated: make(map[string]bool),
+                nextIP:    make(net.IP, len(subnet.IP)),
+        }
+
+        // Start allocation from the second usable IP (first is typically gateway)
+        copy(allocator.nextIP, subnet.IP)
+        allocator.nextIP = allocator.nextIP.Mask(subnet.Mask)
+
+        // Increment to first usable IP
+        allocator.incrementIP(allocator.nextIP)
+        // If that's the gateway, increment again
+        if allocator.nextIP.Equal(gateway) </span><span class="cov8" title="1">{
+                allocator.incrementIP(allocator.nextIP)
+        }</span>
+
+        // Mark gateway as allocated (reserved)
+        <span class="cov8" title="1">allocator.allocated[gateway.String()] = true
+
+        return allocator</span>
+}
+
+// AllocateIP allocates an available IP address from the subnet.
+//
+// Returns an allocated IP address or an error if no addresses are available.
+// The allocated IP is marked as in-use until released.
+func (a *IPAllocator) AllocateIP() (net.IP, error) <span class="cov8" title="1">{
+        a.mutex.Lock()
+        defer a.mutex.Unlock()
+
+        startIP := make(net.IP, len(a.nextIP))
+        copy(startIP, a.nextIP)
+
+        // Try to find an available IP starting from nextIP
+        for </span><span class="cov8" title="1">{
+                ipStr := a.nextIP.String()
+
+                // Check if this IP is available
+                if !a.allocated[ipStr] &amp;&amp; a.subnet.Contains(a.nextIP) </span><span class="cov8" title="1">{
+                        // Found available IP
+                        allocatedIP := make(net.IP, len(a.nextIP))
+                        copy(allocatedIP, a.nextIP)
+
+                        // Mark as allocated
+                        a.allocated[ipStr] = true
+
+                        // Advance nextIP for next allocation
+                        a.incrementIP(a.nextIP)
+
+                        return allocatedIP, nil
+                }</span>
+
+                // Move to next IP
+                <span class="cov0" title="0">a.incrementIP(a.nextIP)
+
+                // Check if we've wrapped around to start (subnet exhausted)
+                if a.nextIP.Equal(startIP) </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("no available IP addresses in subnet %s", a.subnet)
+                }</span>
+
+                // Check if we've gone outside the subnet (shouldn't happen with proper increment)
+                <span class="cov0" title="0">if !a.subnet.Contains(a.nextIP) </span><span class="cov0" title="0">{
+                        // Wrap to beginning of subnet
+                        copy(a.nextIP, a.subnet.IP)
+                        a.nextIP = a.nextIP.Mask(a.subnet.Mask)
+                        a.incrementIP(a.nextIP)
+                }</span>
+        }
+}
+
+// AllocateSpecificIP allocates a specific IP address if available.
+//
+// Returns an error if the IP is already allocated or outside the subnet.
+// This is useful when Docker requests a specific IP address.
+func (a *IPAllocator) AllocateSpecificIP(ip net.IP) error <span class="cov0" title="0">{
+        a.mutex.Lock()
+        defer a.mutex.Unlock()
+
+        // Check if IP is within our subnet
+        if !a.subnet.Contains(ip) </span><span class="cov0" title="0">{
+                return fmt.Errorf("IP %s is outside subnet %s", ip, a.subnet)
+        }</span>
+
+        <span class="cov0" title="0">ipStr := ip.String()
+
+        // Check if IP is already allocated
+        if a.allocated[ipStr] </span><span class="cov0" title="0">{
+                return fmt.Errorf("IP %s is already allocated", ip)
+        }</span>
+
+        // Allocate the IP
+        <span class="cov0" title="0">a.allocated[ipStr] = true
+
+        return nil</span>
+}
+
+// ReleaseIP releases a previously allocated IP address.
+//
+// The IP address becomes available for future allocation. It's safe to call
+// this method with an IP that wasn't allocated or is already released.
+func (a *IPAllocator) ReleaseIP(ip net.IP) <span class="cov8" title="1">{
+        a.mutex.Lock()
+        defer a.mutex.Unlock()
+
+        ipStr := ip.String()
+
+        // Don't release the gateway IP
+        if ip.Equal(a.gateway) </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        // Release the IP
+        <span class="cov8" title="1">delete(a.allocated, ipStr)</span>
+}
+
+// IsAllocated checks if an IP address is currently allocated.
+//
+// Returns true if the IP is allocated, false otherwise.
+func (a *IPAllocator) IsAllocated(ip net.IP) bool <span class="cov0" title="0">{
+        a.mutex.Lock()
+        defer a.mutex.Unlock()
+
+        return a.allocated[ip.String()]
+}</span>
+
+// GetAllocatedIPs returns a slice of all currently allocated IP addresses.
+//
+// This is useful for debugging and monitoring IP allocation state.
+func (a *IPAllocator) GetAllocatedIPs() []net.IP <span class="cov0" title="0">{
+        a.mutex.Lock()
+        defer a.mutex.Unlock()
+
+        var ips []net.IP
+        for ipStr := range a.allocated </span><span class="cov0" title="0">{
+                if ip := net.ParseIP(ipStr); ip != nil </span><span class="cov0" title="0">{
+                        ips = append(ips, ip)
+                }</span>
+        }
+
+        <span class="cov0" title="0">return ips</span>
+}
+
+// GetAvailableCount returns the number of available IP addresses.
+//
+// This provides insight into subnet utilization for monitoring and planning.
+func (a *IPAllocator) GetAvailableCount() int <span class="cov0" title="0">{
+        a.mutex.Lock()
+        defer a.mutex.Unlock()
+
+        // Calculate total IPs in subnet
+        ones, bits := a.subnet.Mask.Size()
+        totalIPs := 1 &lt;&lt; (bits - ones)
+
+        // Subtract network and broadcast addresses for IPv4
+        if len(a.subnet.IP) == 4 </span><span class="cov0" title="0">{ // IPv4
+                totalIPs -= 2 // network and broadcast
+        }</span>
+
+        // Subtract allocated IPs
+        <span class="cov0" title="0">allocated := len(a.allocated)
+
+        available := totalIPs - allocated
+        if available &lt; 0 </span><span class="cov0" title="0">{
+                available = 0
+        }</span>
+
+        <span class="cov0" title="0">return available</span>
+}
+
+// incrementIP increments an IP address by 1.
+//
+// This handles both IPv4 and IPv6 addresses, modifying the IP in-place.
+// The increment wraps at the maximum value for each byte.
+func (a *IPAllocator) incrementIP(ip net.IP) <span class="cov8" title="1">{
+        for i := len(ip) - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                ip[i]++
+                if ip[i] != 0 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">// Package plugin provides network lifecycle management for I2P Docker networks.
+//
+// This file implements Docker's Container Network Model (CNM) network lifecycle
+// operations, integrating I2P connectivity with Docker's networking system.
+package plugin
+
+import (
+        "fmt"
+        "log"
+        "net"
+        "sync"
+
+        "github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
+)
+
+// I2PNetwork represents an I2P network managed by the plugin.
+//
+// Each I2P network provides isolated networking for containers that need
+// to communicate over I2P. Networks manage IP allocation and route traffic
+// through I2P tunnels.
+type I2PNetwork struct {
+        // ID uniquely identifies this network in Docker
+        ID string
+
+        // Name is the human-readable network name
+        Name string
+
+        // Subnet defines the IP address range for this network
+        Subnet *net.IPNet
+
+        // Gateway is the gateway IP address for this network
+        Gateway net.IP
+
+        // TunnelManager handles I2P tunnel creation and management
+        TunnelManager *i2p.TunnelManager
+
+        // Endpoints tracks active endpoints (containers) on this network
+        Endpoints map[string]*I2PEndpoint
+
+        // IPAllocator manages IP address allocation for containers
+        IPAllocator *IPAllocator
+
+        // mutex protects concurrent access to network state
+        mutex sync.RWMutex
+}
+
+// I2PEndpoint represents a container endpoint on an I2P network.
+//
+// Endpoints provide the connection point between containers and the I2P network,
+// managing IP addresses and I2P tunnel configuration.
+type I2PEndpoint struct {
+        // ID uniquely identifies this endpoint
+        ID string
+
+        // NetworkID identifies the network this endpoint belongs to
+        NetworkID string
+
+        // ContainerID identifies the container using this endpoint
+        ContainerID string
+
+        // IPAddress is the assigned IP address for this endpoint
+        IPAddress net.IP
+
+        // MacAddress is the assigned MAC address for this endpoint
+        MacAddress string
+
+        // ClientTunnels are I2P client tunnels for outbound connections
+        ClientTunnels map[string]*i2p.Tunnel
+
+        // ServerTunnels are I2P server tunnels for inbound connections
+        ServerTunnels map[string]*i2p.Tunnel
+}
+
+// NetworkManager manages I2P networks and their lifecycle.
+//
+// The NetworkManager maintains network state and coordinates between Docker's
+// network operations and I2P tunnel management. It ensures proper cleanup
+// and resource management throughout the network lifecycle.
+type NetworkManager struct {
+        // networks tracks all active I2P networks
+        networks map[string]*I2PNetwork
+
+        // tunnelMgr provides I2P tunnel management capabilities
+        tunnelMgr *i2p.TunnelManager
+
+        // defaultSubnet defines the base subnet for I2P networks
+        defaultSubnet *net.IPNet
+
+        // mutex protects concurrent access to network manager state
+        mutex sync.RWMutex
+}
+
+// NewNetworkManager creates a new network manager for I2P networks.
+//
+// The manager requires a TunnelManager to handle I2P connectivity for networks.
+func NewNetworkManager(tunnelMgr *i2p.TunnelManager) (*NetworkManager, error) <span class="cov8" title="1">{
+        if tunnelMgr == nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("tunnel manager cannot be nil")
+        }</span>
+
+        <span class="cov8" title="1">return &amp;NetworkManager{
+                networks:  make(map[string]*I2PNetwork),
+                tunnelMgr: tunnelMgr,
+        }, nil</span>
+}
+
+// CreateNetwork creates a new I2P network.
+//
+// This method implements Docker's CreateNetwork operation, setting up the
+// network infrastructure including IP allocation and I2P tunnel management.
+func (nm *NetworkManager) CreateNetwork(networkID string, options map[string]interface{}, ipamData []IPAMData) error <span class="cov8" title="1">{
+        nm.mutex.Lock()
+        defer nm.mutex.Unlock()
+
+        // Validate network ID
+        if networkID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("network ID cannot be empty")
+        }</span>
+
+        // Check if network already exists
+        <span class="cov8" title="1">if _, exists := nm.networks[networkID]; exists </span><span class="cov8" title="1">{
+                return fmt.Errorf("network %s already exists", networkID)
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Creating I2P network %s", networkID)
+
+        // Determine subnet for this network
+        subnet, gateway, err := nm.allocateNetworkSubnet(ipamData)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to allocate network subnet: %w", err)
+        }</span>
+
+        // Create tunnel manager for this network
+        <span class="cov8" title="1">tunnelManager := nm.tunnelMgr
+
+        // Create IP allocator for this network
+        ipAllocator := NewIPAllocator(subnet, gateway)
+
+        // Create the network
+        network := &amp;I2PNetwork{
+                ID:            networkID,
+                Name:          getNetworkName(options),
+                Subnet:        subnet,
+                Gateway:       gateway,
+                TunnelManager: tunnelManager,
+                Endpoints:     make(map[string]*I2PEndpoint),
+                IPAllocator:   ipAllocator,
+        }
+
+        // Store the network
+        nm.networks[networkID] = network
+
+        log.Printf("Successfully created I2P network %s with subnet %s", networkID, subnet)
+        return nil</span>
+}
+
+// DeleteNetwork removes an I2P network and cleans up all resources.
+//
+// This method implements Docker's DeleteNetwork operation, ensuring proper
+// cleanup of I2P tunnels and network resources.
+func (nm *NetworkManager) DeleteNetwork(networkID string) error <span class="cov8" title="1">{
+        nm.mutex.Lock()
+        defer nm.mutex.Unlock()
+
+        // Validate network ID
+        if networkID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("network ID cannot be empty")
+        }</span>
+
+        <span class="cov8" title="1">network, exists := nm.networks[networkID]
+        if !exists </span><span class="cov8" title="1">{
+                return fmt.Errorf("network %s not found", networkID)
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Deleting I2P network %s", networkID)
+
+        // Clean up all endpoints first
+        network.mutex.Lock()
+        for endpointID := range network.Endpoints </span><span class="cov0" title="0">{
+                if err := nm.deleteEndpointInternal(network, endpointID); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Failed to clean up endpoint %s: %v", endpointID, err)
+                }</span>
+        }
+        <span class="cov8" title="1">network.mutex.Unlock()
+
+        // Clean up all I2P tunnels
+        if err := network.TunnelManager.DestroyAllTunnels(); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Warning: Failed to destroy all tunnels: %v", err)
+        }</span>
+
+        // Remove network from manager
+        <span class="cov8" title="1">delete(nm.networks, networkID)
+
+        log.Printf("Successfully deleted I2P network %s", networkID)
+        return nil</span>
+}
+
+// GetNetwork retrieves a network by ID.
+//
+// Returns the network if it exists, or nil if not found.
+func (nm *NetworkManager) GetNetwork(networkID string) *I2PNetwork <span class="cov8" title="1">{
+        nm.mutex.RLock()
+        defer nm.mutex.RUnlock()
+
+        return nm.networks[networkID]
+}</span>
+
+// ListNetworks returns a list of all network IDs.
+//
+// This provides visibility into active I2P networks for debugging and monitoring.
+func (nm *NetworkManager) ListNetworks() []string <span class="cov8" title="1">{
+        nm.mutex.RLock()
+        defer nm.mutex.RUnlock()
+
+        var networks []string
+        for networkID := range nm.networks </span><span class="cov8" title="1">{
+                networks = append(networks, networkID)
+        }</span>
+        <span class="cov8" title="1">return networks</span>
+}
+
+// CreateEndpoint creates a new endpoint for a container on an I2P network.
+//
+// This method implements Docker's CreateEndpoint operation, setting up
+// the endpoint configuration but not yet connecting it to the network.
+func (nm *NetworkManager) CreateEndpoint(networkID, endpointID string, options map[string]interface{}) (*I2PEndpoint, error) <span class="cov8" title="1">{
+        nm.mutex.Lock()
+        defer nm.mutex.Unlock()
+
+        // Validate inputs
+        if networkID == "" </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("network ID cannot be empty")
+        }</span>
+        <span class="cov8" title="1">if endpointID == "" </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("endpoint ID cannot be empty")
+        }</span>
+
+        // Get the network
+        <span class="cov8" title="1">network, exists := nm.networks[networkID]
+        if !exists </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("network %s not found", networkID)
+        }</span>
+
+        // Check if endpoint already exists
+        <span class="cov8" title="1">if _, exists := network.Endpoints[endpointID]; exists </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("endpoint %s already exists on network %s", endpointID, networkID)
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Creating I2P endpoint %s on network %s", endpointID, networkID)
+
+        // Allocate IP address for the endpoint
+        ipAddr, err := network.IPAllocator.AllocateIP()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to allocate IP address: %w", err)
+        }</span>
+
+        // Generate MAC address for the endpoint
+        <span class="cov8" title="1">macAddr := generateMACAddress(ipAddr)
+
+        // Create the endpoint structure
+        endpoint := &amp;I2PEndpoint{
+                ID:            endpointID,
+                NetworkID:     networkID,
+                IPAddress:     ipAddr,
+                MacAddress:    macAddr,
+                ClientTunnels: make(map[string]*i2p.Tunnel),
+                ServerTunnels: make(map[string]*i2p.Tunnel),
+        }
+
+        // Store the endpoint
+        network.Endpoints[endpointID] = endpoint
+
+        log.Printf("Successfully created I2P endpoint %s on network %s", endpointID, networkID)
+        return endpoint, nil</span>
+}
+
+// DeleteEndpoint removes an endpoint from an I2P network.
+//
+// This method implements Docker's DeleteEndpoint operation, cleaning up
+// all I2P resources associated with the endpoint.
+func (nm *NetworkManager) DeleteEndpoint(networkID, endpointID string) error <span class="cov8" title="1">{
+        nm.mutex.Lock()
+        defer nm.mutex.Unlock()
+
+        // Validate inputs
+        if networkID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("network ID cannot be empty")
+        }</span>
+        <span class="cov8" title="1">if endpointID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("endpoint ID cannot be empty")
+        }</span>
+
+        // Get the network
+        <span class="cov8" title="1">network, exists := nm.networks[networkID]
+        if !exists </span><span class="cov0" title="0">{
+                return fmt.Errorf("network %s not found", networkID)
+        }</span>
+
+        // Check if endpoint exists
+        <span class="cov8" title="1">if _, exists := network.Endpoints[endpointID]; !exists </span><span class="cov0" title="0">{
+                return fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Deleting I2P endpoint %s from network %s", endpointID, networkID)
+
+        // Use the existing internal cleanup method
+        if err := nm.deleteEndpointInternal(network, endpointID); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to delete endpoint %s: %w", endpointID, err)
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Successfully deleted I2P endpoint %s from network %s", endpointID, networkID)
+        return nil</span>
+}
+
+// JoinEndpoint connects a container to an I2P network through an endpoint.
+//
+// This method implements Docker's Join operation, allocating IP addresses
+// and setting up I2P tunnels for the container.
+func (nm *NetworkManager) JoinEndpoint(networkID, endpointID, containerID, sandboxKey string) (*I2PEndpoint, error) <span class="cov8" title="1">{
+        nm.mutex.Lock()
+        defer nm.mutex.Unlock()
+
+        // Validate inputs
+        if networkID == "" </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("network ID cannot be empty")
+        }</span>
+        <span class="cov8" title="1">if endpointID == "" </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("endpoint ID cannot be empty")
+        }</span>
+        <span class="cov8" title="1">if containerID == "" </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("container ID cannot be empty")
+        }</span>
+
+        // Get the network
+        <span class="cov8" title="1">network, exists := nm.networks[networkID]
+        if !exists </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("network %s not found", networkID)
+        }</span>
+
+        // Get the endpoint
+        <span class="cov8" title="1">endpoint, exists := network.Endpoints[endpointID]
+        if !exists </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+        }</span>
+
+        // Check if endpoint is already joined
+        <span class="cov8" title="1">if endpoint.ContainerID != "" </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("endpoint %s is already joined to container %s", endpointID, endpoint.ContainerID)
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Joining container %s to I2P network %s via endpoint %s", containerID, networkID, endpointID)
+
+        // Update endpoint with container information
+        endpoint.ContainerID = containerID
+
+        log.Printf("Container %s joined I2P network %s with IP %s via endpoint %s",
+                containerID, networkID, endpoint.IPAddress.String(), endpointID)
+
+        return endpoint, nil</span>
+}
+
+// LeaveEndpoint disconnects a container from an I2P network.
+//
+// This method implements Docker's Leave operation, cleaning up
+// IP allocations but preserving the endpoint for potential reuse.
+func (nm *NetworkManager) LeaveEndpoint(networkID, endpointID string) error <span class="cov8" title="1">{
+        nm.mutex.Lock()
+        defer nm.mutex.Unlock()
+
+        // Validate inputs
+        if networkID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("network ID cannot be empty")
+        }</span>
+        <span class="cov8" title="1">if endpointID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("endpoint ID cannot be empty")
+        }</span>
+
+        // Get the network
+        <span class="cov8" title="1">network, exists := nm.networks[networkID]
+        if !exists </span><span class="cov0" title="0">{
+                return fmt.Errorf("network %s not found", networkID)
+        }</span>
+
+        // Get the endpoint
+        <span class="cov8" title="1">endpoint, exists := network.Endpoints[endpointID]
+        if !exists </span><span class="cov0" title="0">{
+                return fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+        }</span>
+
+        // Check if endpoint is actually joined
+        <span class="cov8" title="1">if endpoint.ContainerID == "" </span><span class="cov0" title="0">{
+                return nil // Already left
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Container %s leaving I2P network %s via endpoint %s",
+                endpoint.ContainerID, networkID, endpointID)
+
+        // Clean up I2P tunnels for this endpoint
+        for tunnelName, tunnel := range endpoint.ClientTunnels </span><span class="cov0" title="0">{
+                if err := network.TunnelManager.DestroyTunnel(tunnel.GetConfig().Name); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Failed to destroy client tunnel %s: %v", tunnelName, err)
+                }</span>
+        }
+        <span class="cov8" title="1">endpoint.ClientTunnels = make(map[string]*i2p.Tunnel)
+
+        for tunnelName, tunnel := range endpoint.ServerTunnels </span><span class="cov0" title="0">{
+                if err := network.TunnelManager.DestroyTunnel(tunnel.GetConfig().Name); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Failed to destroy server tunnel %s: %v", tunnelName, err)
+                }</span>
+        }
+        <span class="cov8" title="1">endpoint.ServerTunnels = make(map[string]*i2p.Tunnel)
+
+        // Check if this is the last endpoint for the container
+        containerID := endpoint.ContainerID
+        hasOtherEndpoints := false
+        for _, ep := range network.Endpoints </span><span class="cov8" title="1">{
+                if ep.ContainerID == containerID &amp;&amp; ep.ID != endpointID </span><span class="cov0" title="0">{
+                        hasOtherEndpoints = true
+                        break</span>
+                }
+        }
+
+        // Clean up container session if this was the last endpoint
+        <span class="cov8" title="1">if !hasOtherEndpoints </span><span class="cov8" title="1">{
+                if err := network.TunnelManager.DestroyContainerSession(containerID); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Failed to destroy container session for %s: %v", containerID, err)
+                }</span>
+        }
+
+        // Release IP address
+        <span class="cov8" title="1">if endpoint.IPAddress != nil </span><span class="cov8" title="1">{
+                network.IPAllocator.ReleaseIP(endpoint.IPAddress)
+                endpoint.IPAddress = nil
+        }</span>
+
+        // Clear container information but keep endpoint for reuse
+        <span class="cov8" title="1">endpoint.ContainerID = ""
+        endpoint.MacAddress = ""
+
+        log.Printf("Container %s left I2P network %s via endpoint %s",
+                containerID, networkID, endpointID)
+
+        return nil</span>
+}
+
+// GetEndpoint retrieves an endpoint by ID from a network.
+//
+// This method provides access to endpoint information for debugging and monitoring.
+func (nm *NetworkManager) GetEndpoint(networkID, endpointID string) (*I2PEndpoint, error) <span class="cov0" title="0">{
+        nm.mutex.RLock()
+        defer nm.mutex.RUnlock()
+
+        // Get the network
+        network, exists := nm.networks[networkID]
+        if !exists </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("network %s not found", networkID)
+        }</span>
+
+        // Get the endpoint
+        <span class="cov0" title="0">endpoint, exists := network.Endpoints[endpointID]
+        if !exists </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+        }</span>
+
+        <span class="cov0" title="0">return endpoint, nil</span>
+}
+
+// generateMACAddress generates a MAC address based on IP address.
+//
+// This ensures consistent MAC addresses for the same IP allocation.
+func generateMACAddress(ip net.IP) string <span class="cov8" title="1">{
+        // Use a fixed prefix for I2P networks and derive from IP
+        // Format: 02:42:XX:XX:XX:XX where XX comes from IP
+        ipv4 := ip.To4()
+        if ipv4 == nil </span><span class="cov0" title="0">{
+                // Fallback for IPv6 or invalid IP
+                return "02:42:00:00:00:01"
+        }</span>
+
+        <span class="cov8" title="1">return fmt.Sprintf("02:42:%02x:%02x:%02x:%02x",
+                ipv4[0], ipv4[1], ipv4[2], ipv4[3])</span>
+}
+
+// allocateNetworkSubnet determines the subnet and gateway for a new network.
+//
+// This method handles IPAM (IP Address Management) data from Docker and
+// allocates appropriate network ranges for I2P networks.
+func (nm *NetworkManager) allocateNetworkSubnet(ipamData []IPAMData) (*net.IPNet, net.IP, error) <span class="cov8" title="1">{
+        // If IPAM data is provided, use the first IPv4 pool
+        if len(ipamData) &gt; 0 </span><span class="cov8" title="1">{
+                for _, data := range ipamData </span><span class="cov8" title="1">{
+                        if data.Pool != "" </span><span class="cov8" title="1">{
+                                // Parse the provided subnet
+                                _, subnet, err := net.ParseCIDR(data.Pool)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, nil, fmt.Errorf("invalid subnet in IPAM data: %w", err)
+                                }</span>
+
+                                // Use provided gateway or calculate default
+                                <span class="cov8" title="1">var gateway net.IP
+                                if data.Gateway != "" </span><span class="cov8" title="1">{
+                                        gateway = net.ParseIP(data.Gateway)
+                                        if gateway == nil </span><span class="cov0" title="0">{
+                                                return nil, nil, fmt.Errorf("invalid gateway IP: %s", data.Gateway)
+                                        }</span>
+                                } else<span class="cov0" title="0"> {
+                                        // Default to first usable IP in subnet as gateway
+                                        gateway = calculateDefaultGateway(subnet)
+                                }</span>
+
+                                <span class="cov8" title="1">return subnet, gateway, nil</span>
+                        }
+                }
+        }
+
+        // No IPAM data provided, allocate from default subnet
+        // For simplicity, we'll use /24 subnets within our /16 default
+        // In production, this would need more sophisticated allocation
+        <span class="cov8" title="1">subnet := &amp;net.IPNet{
+                IP:   net.IPv4(172, 20, 1, 0),
+                Mask: net.IPv4Mask(255, 255, 255, 0),
+        }
+        gateway := net.IPv4(172, 20, 1, 1)
+
+        return subnet, gateway, nil</span>
+}
+
+// calculateDefaultGateway calculates the default gateway IP for a subnet.
+//
+// Returns the first usable IP address in the subnet (network address + 1).
+func calculateDefaultGateway(subnet *net.IPNet) net.IP <span class="cov0" title="0">{
+        // Get network address
+        network := subnet.IP.Mask(subnet.Mask)
+
+        // Calculate first usable IP (network + 1)
+        gateway := make(net.IP, len(network))
+        copy(gateway, network)
+
+        // Increment the last byte
+        for i := len(gateway) - 1; i &gt;= 0; i-- </span><span class="cov0" title="0">{
+                gateway[i]++
+                if gateway[i] != 0 </span><span class="cov0" title="0">{
+                        break</span>
+                }
+        }
+
+        <span class="cov0" title="0">return gateway</span>
+}
+
+// getNetworkName extracts the network name from options.
+//
+// Returns the network name if provided in options, or empty string.
+func getNetworkName(options map[string]interface{}) string <span class="cov8" title="1">{
+        if name, ok := options["com.docker.network.generic"].(map[string]interface{}); ok </span><span class="cov0" title="0">{
+                if networkName, ok := name["name"].(string); ok </span><span class="cov0" title="0">{
+                        return networkName
+                }</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+
+// deleteEndpointInternal removes an endpoint from a network (internal helper).
+//
+// This is called during network cleanup and assumes locks are already held.
+func (nm *NetworkManager) deleteEndpointInternal(network *I2PNetwork, endpointID string) error <span class="cov8" title="1">{
+        endpoint, exists := network.Endpoints[endpointID]
+        if !exists </span><span class="cov0" title="0">{
+                return nil // Already deleted
+        }</span>
+
+        <span class="cov8" title="1">log.Printf("Cleaning up endpoint %s on network %s", endpointID, network.ID)
+
+        // Clean up I2P tunnels for this endpoint
+        for _, tunnel := range endpoint.ClientTunnels </span><span class="cov0" title="0">{
+                if err := network.TunnelManager.DestroyTunnel(tunnel.GetConfig().Name); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Failed to destroy client tunnel: %v", err)
+                }</span>
+        }
+
+        <span class="cov8" title="1">for _, tunnel := range endpoint.ServerTunnels </span><span class="cov0" title="0">{
+                if err := network.TunnelManager.DestroyTunnel(tunnel.GetConfig().Name); err != nil </span><span class="cov0" title="0">{
+                        log.Printf("Warning: Failed to destroy server tunnel: %v", err)
+                }</span>
+        }
+
+        // Clean up container session if this was the last endpoint for the container
+        <span class="cov8" title="1">if endpoint.ContainerID != "" </span><span class="cov0" title="0">{
+                hasOtherEndpoints := false
+                for _, ep := range network.Endpoints </span><span class="cov0" title="0">{
+                        if ep.ContainerID == endpoint.ContainerID &amp;&amp; ep.ID != endpointID </span><span class="cov0" title="0">{
+                                hasOtherEndpoints = true
+                                break</span>
+                        }
+                }
+
+                <span class="cov0" title="0">if !hasOtherEndpoints </span><span class="cov0" title="0">{
+                        if err := network.TunnelManager.DestroyContainerSession(endpoint.ContainerID); err != nil </span><span class="cov0" title="0">{
+                                log.Printf("Warning: Failed to destroy container session: %v", err)
+                        }</span>
+                }
+        }
+
+        // Release IP address
+        <span class="cov8" title="1">if endpoint.IPAddress != nil </span><span class="cov8" title="1">{
+                network.IPAllocator.ReleaseIP(endpoint.IPAddress)
+        }</span>
+
+        // Remove endpoint
+        <span class="cov8" title="1">delete(network.Endpoints, endpointID)
+
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">// Package plugin implements the Docker network plugin interface for I2P connectivity.package plugin
+
+// This package provides the core implementation of Docker's Container Network Model (CNM)
+// interfaces, enabling containers to communicate over the I2P network transparently.
+package plugin
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "io"
+        "log"
+        "net"
+        "net/http"
+        "os"
+
+        "github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
+)
+
+// Plugin represents the I2P Docker network plugin.
+type Plugin struct {
+        sockPath   string
+        listener   net.Listener
+        server     *http.Server
+        networkMgr *NetworkManager
+}
+
+// New creates a new instance of the I2P network plugin.
+//
+// The sockPath parameter specifies the Unix socket path where the plugin
+// will listen for Docker daemon requests. This follows Docker's plugin
+// discovery mechanism.
+func New(sockPath string) (*Plugin, error) <span class="cov8" title="1">{
+        if sockPath == "" </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("socket path cannot be empty")
+        }</span>
+
+        // Create SAM client for I2P connectivity
+        <span class="cov8" title="1">samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create SAM client: %w", err)
+        }</span>
+
+        // Create tunnel manager for I2P network operations
+        <span class="cov8" title="1">tunnelMgr := i2p.NewTunnelManager(samClient)
+
+        // Create network manager with I2P integration
+        networkMgr, err := NewNetworkManager(tunnelMgr)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create network manager: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Plugin{
+                sockPath:   sockPath,
+                networkMgr: networkMgr,
+        }, nil</span>
+}
+
+// Start begins the plugin operation, listening for Docker daemon requests.
+//
+// This method sets up the Unix socket listener and HTTP server to handle
+// Docker's plugin API calls. It blocks until the context is cancelled.
+func (p *Plugin) Start(ctx context.Context) error <span class="cov8" title="1">{
+        // Clean up any existing socket file
+        if err := os.RemoveAll(p.sockPath); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to remove existing socket: %w", err)
+        }</span>
+
+        // Create Unix socket listener
+        <span class="cov8" title="1">listener, err := net.Listen("unix", p.sockPath)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create Unix socket listener: %w", err)
+        }</span>
+        <span class="cov8" title="1">p.listener = listener
+
+        // Set socket permissions to allow Docker daemon access
+        if err := os.Chmod(p.sockPath, 0600); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to set socket permissions: %w", err)
+        }</span>
+
+        // Create HTTP server with plugin handlers
+        <span class="cov8" title="1">mux := http.NewServeMux()
+        p.setupHandlers(mux)
+
+        p.server = &amp;http.Server{
+                Handler: mux,
+        }
+
+        log.Printf("Plugin listening on %s", p.sockPath)
+
+        // Start server in a goroutine
+        errCh := make(chan error, 1)
+        go func() </span><span class="cov8" title="1">{
+                if err := p.server.Serve(listener); err != nil &amp;&amp; err != http.ErrServerClosed </span><span class="cov0" title="0">{
+                        errCh &lt;- fmt.Errorf("server error: %w", err)
+                }</span>
+        }()
+
+        // Wait for context cancellation or server error
+        <span class="cov8" title="1">select </span>{
+        case &lt;-ctx.Done():<span class="cov8" title="1">
+                log.Println("Shutting down plugin server...")
+                return p.server.Shutdown(context.Background())</span>
+        case err := &lt;-errCh:<span class="cov0" title="0">
+                return err</span>
+        }
+}
+
+// setupHandlers configures the HTTP handlers for Docker plugin API endpoints.
+//
+// This implements the Docker Plugin API v2 specification for network plugins.
+// The handlers provide the required endpoints for plugin activation and
+// network operations.
+func (p *Plugin) setupHandlers(mux *http.ServeMux) <span class="cov8" title="1">{
+        // Plugin activation endpoint
+        mux.HandleFunc("/Plugin.Activate", p.handleActivate)
+
+        // Network driver endpoints (stub implementations for now)
+        mux.HandleFunc("/NetworkDriver.GetCapabilities", p.handleGetCapabilities)
+        mux.HandleFunc("/NetworkDriver.CreateNetwork", p.handleCreateNetwork)
+        mux.HandleFunc("/NetworkDriver.DeleteNetwork", p.handleDeleteNetwork)
+        mux.HandleFunc("/NetworkDriver.CreateEndpoint", p.handleCreateEndpoint)
+        mux.HandleFunc("/NetworkDriver.DeleteEndpoint", p.handleDeleteEndpoint)
+        mux.HandleFunc("/NetworkDriver.EndpointOperInfo", p.handleEndpointInfo)
+        mux.HandleFunc("/NetworkDriver.Join", p.handleJoin)
+        mux.HandleFunc("/NetworkDriver.Leave", p.handleLeave)
+        mux.HandleFunc("/NetworkDriver.DiscoverNew", p.handleDiscoverNew)
+        mux.HandleFunc("/NetworkDriver.DiscoverDelete", p.handleDiscoverDelete)
+        mux.HandleFunc("/NetworkDriver.ProgramExternalConnectivity", p.handleProgramExternalConnectivity)
+        mux.HandleFunc("/NetworkDriver.RevokeExternalConnectivity", p.handleRevokeExternalConnectivity)
+}</span>
+
+// handleActivate responds to Docker's plugin activation request.
+//
+// This tells Docker that this plugin implements the NetworkDriver interface.
+func (p *Plugin) handleActivate(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        log.Println("Received Plugin.Activate request")
+
+        response := ActivateResponse{
+                Implements: []string{"NetworkDriver"},
+        }
+
+        p.writeJSONResponse(w, response)
+}</span>
+
+// writeJSONResponse is a helper to write JSON responses.
+//
+// This properly marshals the response data to JSON and handles errors.
+// All Docker plugin API responses must be valid JSON.
+func (p *Plugin) writeJSONResponse(w http.ResponseWriter, data interface{}) <span class="cov8" title="1">{
+        w.Header().Set("Content-Type", "application/json")
+
+        if err := json.NewEncoder(w).Encode(data); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Error encoding JSON response: %v", err)
+                // Fall back to a basic error response
+                w.WriteHeader(http.StatusInternalServerError)
+                w.Write([]byte(`{"Err": "Internal server error"}`))
+        }</span>
+}
+
+// readJSONRequest is a helper to read and parse JSON requests.
+//
+// This reads the request body and unmarshals it into the provided structure.
+// Returns an error if the request cannot be parsed.
+func (p *Plugin) readJSONRequest(r *http.Request, v interface{}) error <span class="cov8" title="1">{
+        body, err := io.ReadAll(r.Body)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to read request body: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer r.Body.Close()
+
+        if len(body) == 0 </span><span class="cov8" title="1">{
+                // Empty body is acceptable for some requests
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">if err := json.Unmarshal(body, v); err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("failed to unmarshal JSON: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

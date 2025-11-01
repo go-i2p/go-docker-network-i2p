@@ -1,0 +1,40 @@
+{
+  "description": "I2P Docker Network Plugin - Provides transparent I2P connectivity for Docker containers",
+  "documentation": "https://github.com/go-i2p/go-docker-network-i2p",
+  "interface": {
+    "types": ["docker.networkdriver/1.0"],
+    "socket": "i2p-network.sock"
+  },
+  "network": {
+    "type": "host"
+  },
+  "mounts": [
+    {
+      "source": "/var/run/docker.sock",
+      "destination": "/var/run/docker.sock",
+      "type": "bind",
+      "options": ["rbind"]
+    }
+  ],
+  "capabilities": ["CAP_NET_ADMIN", "CAP_SYS_ADMIN"],
+  "env": [
+    {
+      "name": "I2P_SAM_HOST",
+      "description": "I2P SAM bridge host (default: localhost)",
+      "value": "localhost"
+    },
+    {
+      "name": "I2P_SAM_PORT", 
+      "description": "I2P SAM bridge port (default: 7656)",
+      "value": "7656"
+    },
+    {
+      "name": "DEBUG",
+      "description": "Enable debug logging",
+      "value": "false"
+    }
+  ],
+  "linux": {
+    "capabilities": ["CAP_NET_ADMIN", "CAP_SYS_ADMIN"]
+  }
+}
