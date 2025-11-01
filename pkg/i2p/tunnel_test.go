@@ -52,9 +52,32 @@ func TestNewTunnelManager(t *testing.T) {
 	}
 }
 
+// isI2PAvailable checks if I2P SAM is available for testing
+func isI2PAvailable() bool {
+	client, err := NewSAMClient(nil)
+	if err != nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = client.Connect(ctx)
+	if err != nil {
+		return false
+	}
+
+	client.Disconnect()
+	return true
+}
+
 func TestTunnelManagerCreateTunnel(t *testing.T) {
 	client, _ := NewSAMClient(nil) // Error expected for validation purposes
 	tm := NewTunnelManager(client)
+
+	// Check if I2P is available for environment-aware testing
+	i2pAvailable := isI2PAvailable()
+	t.Logf("I2P SAM availability: %v", i2pAvailable)
 
 	tests := []struct {
 		name    string
@@ -134,7 +157,7 @@ func TestTunnelManagerCreateTunnel(t *testing.T) {
 				LocalPort:   8080,
 				Destination: "example.b32.i2p",
 			},
-			wantErr: true, // Will fail because SAM client is not connected
+			wantErr: !i2pAvailable, // Succeed if I2P is available, fail if not
 		},
 		{
 			name: "valid server tunnel config",
@@ -144,7 +167,7 @@ func TestTunnelManagerCreateTunnel(t *testing.T) {
 				Type:        TunnelTypeServer,
 				LocalPort:   8080,
 			},
-			wantErr: true, // Will fail because SAM client is not connected
+			wantErr: !i2pAvailable, // Succeed if I2P is available, fail if not
 		},
 	}
 
@@ -162,6 +185,17 @@ func TestTunnelManagerCreateTunnel(t *testing.T) {
 
 			if !tt.wantErr && tunnel == nil {
 				t.Error("CreateTunnel() returned nil tunnel without error")
+			}
+
+			// Clean up successfully created tunnels when I2P is available
+			if !tt.wantErr && tunnel != nil {
+				if err := tm.DestroyTunnel(tt.config.Name); err != nil {
+					t.Logf("Warning: Failed to cleanup tunnel %s: %v", tt.config.Name, err)
+				}
+				// Also clean up container session if this was the last tunnel
+				if err := tm.DestroyContainerSession(tt.config.ContainerID); err != nil {
+					t.Logf("Warning: Failed to cleanup container session %s: %v", tt.config.ContainerID, err)
+				}
 			}
 		})
 	}
@@ -309,16 +343,35 @@ func TestTunnelManagerContainerSessions(t *testing.T) {
 	client, _ := NewSAMClient(nil)
 	tm := NewTunnelManager(client)
 
+	// Check if I2P is available for environment-aware testing
+	i2pAvailable := isI2PAvailable()
+	t.Logf("I2P SAM availability: %v", i2pAvailable)
+
 	// Test listing empty container sessions
 	sessions := tm.ListContainerSessions()
 	if len(sessions) != 0 {
 		t.Errorf("Expected empty container sessions list, got %d sessions", len(sessions))
 	}
 
-	// Test getting or creating container session (will fail if SAM not connected)
-	_, err := tm.GetOrCreateContainerSession("container-123")
-	if err == nil {
-		t.Error("GetOrCreateContainerSession() should return error when SAM client not connected")
+	// Test getting or creating container session (behavior depends on I2P availability)
+	containerSession, err := tm.GetOrCreateContainerSession("container-123")
+	if i2pAvailable {
+		// If I2P is available, session creation should succeed
+		if err != nil {
+			t.Errorf("GetOrCreateContainerSession() unexpected error with I2P available: %v", err)
+		}
+		if containerSession == nil {
+			t.Error("GetOrCreateContainerSession() returned nil session without error")
+		}
+		// Clean up the created session
+		if err := tm.DestroyContainerSession("container-123"); err != nil {
+			t.Logf("Warning: Failed to cleanup container session: %v", err)
+		}
+	} else {
+		// If I2P is not available, session creation should fail
+		if err == nil {
+			t.Error("GetOrCreateContainerSession() should return error when SAM client not connected")
+		}
 	}
 
 	// Test destroying non-existent container session (should succeed)
