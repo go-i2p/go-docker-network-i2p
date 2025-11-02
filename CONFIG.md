@@ -250,8 +250,52 @@ Docker network creation supports driver-specific options:
 | `i2p.filter.mode` | string | Filter mode: `allowlist`, `blocklist`, or `disabled` |
 | `i2p.filter.allowlist` | string | Comma-separated list of allowed destinations |
 | `i2p.filter.blocklist` | string | Comma-separated list of blocked destinations |
+| `i2p.exposure.default` | string | Default port exposure type: `i2p` or `ip` (default: `i2p`) |
+| `i2p.exposure.allow_ip` | bool | Allow IP-based port exposure (default: `true`) |
 
-### Usage Examples
+### Selective Port Exposure Options
+
+The plugin supports flexible port exposure, allowing services to be exposed either to the I2P network or to specific IP addresses.
+
+#### Container Labels
+
+Container labels provide per-port exposure configuration:
+
+| Label | Format | Description |
+|-------|--------|-------------|
+| `i2p.expose.<port>` | `i2p` or `ip[:address]` | Configure exposure for specific port |
+
+**Label Formats:**
+- `i2p.expose.80=i2p` - Expose port 80 to I2P network (.b32.i2p address)
+- `i2p.expose.443=ip` - Expose port 443 to localhost (127.0.0.1:443)
+- `i2p.expose.8080=ip:0.0.0.0` - Expose port 8080 to all interfaces
+- `i2p.expose.3000=ip:192.168.1.100` - Expose port 3000 to specific IP
+- `i2p.expose.9090=ip:::1` - Expose port 9090 to IPv6 localhost
+
+#### Network-Level Configuration
+
+Network-level options set defaults for all containers on the network:
+
+**`i2p.exposure.default`** (string, default: `i2p`)
+- Sets the default exposure type for ports without explicit configuration
+- Values: `i2p` (I2P network) or `ip` (IP address)
+- Applies to ports detected from EXPOSE directives and environment variables
+
+**`i2p.exposure.allow_ip`** (bool, default: `true`)
+- Controls whether IP-based exposure is permitted on this network
+- When `false`, all IP exposure requests are forced to I2P
+- Provides network-level security policy enforcement
+
+#### Configuration Precedence
+
+Port exposure configuration follows this priority order:
+1. **Container labels** (`i2p.expose.*`) - Highest priority, overrides all other sources
+2. **Docker EXPOSE directives** - Medium priority, defaults to network's `i2p.exposure.default`
+3. **Environment variables** (`PORT`, `HTTP_PORT`, etc.) - Lowest priority, defaults to network's `i2p.exposure.default`
+
+Network policy (`i2p.exposure.allow_ip`) is always enforced regardless of configuration source.
+
+### Network Driver Options Examples
 
 ```bash
 # Create network with custom SAM host
@@ -282,6 +326,50 @@ docker network create --driver=i2p \
   --opt i2p.tunnels.outbound=1 \
   --opt i2p.filter.mode=disabled \
   dev-i2p
+
+# Create network with IP exposure as default
+docker network create --driver=i2p \
+  --opt i2p.exposure.default=ip \
+  --opt i2p.exposure.allow_ip=true \
+  dev-network
+
+# Create secure I2P-only network (disallow IP exposure)
+docker network create --driver=i2p \
+  --opt i2p.exposure.allow_ip=false \
+  secure-i2p-network
+```
+
+### Container Label Examples
+
+```bash
+# Expose port 80 to I2P, port 443 to localhost
+docker run -d --name web-service \
+  --network my-i2p-network \
+  --label i2p.expose.80=i2p \
+  --label i2p.expose.443=ip:127.0.0.1 \
+  nginx:alpine
+
+# Expose multiple ports with different configurations
+docker run -d --name multi-service \
+  --network my-i2p-network \
+  --label i2p.expose.8080=i2p \
+  --label i2p.expose.9090=ip:0.0.0.0 \
+  --label i2p.expose.3000=ip:192.168.1.100 \
+  multi-app:latest
+
+# IPv6 exposure
+docker run -d --name ipv6-service \
+  --network my-i2p-network \
+  --label i2p.expose.8080=ip:::1 \
+  --label i2p.expose.8443=ip:fe80::1 \
+  app:latest
+
+# Default localhost exposure (omit IP address)
+docker run -d --name local-service \
+  --network my-i2p-network \
+  --label i2p.expose.5000=ip \
+  api:latest
+# Port 5000 exposed on 127.0.0.1:5000
 ```
 
 ## Validation Rules

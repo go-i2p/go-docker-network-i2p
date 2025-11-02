@@ -299,6 +299,161 @@ docker logs custom-service | grep "\.b32\.i2p"
 # [INFO] Service 'admin' exposed on: abc123def456.b32.i2p:9090
 ```
 
+### Selective Port Exposure
+
+The plugin supports flexible port exposure, allowing you to expose services either to the I2P network or to specific IP addresses:
+
+#### Container Label-Based Configuration
+
+```bash
+# Expose port 80 to I2P and port 443 to localhost
+docker run -d --name hybrid-service \
+  --network my-i2p-network \
+  --label i2p.expose.80=i2p \
+  --label i2p.expose.443=ip:127.0.0.1 \
+  nginx:alpine
+
+# Expose multiple ports with different configurations
+docker run -d --name multi-expose \
+  --network my-i2p-network \
+  --label i2p.expose.8080=i2p \
+  --label i2p.expose.9090=ip:0.0.0.0 \
+  --label i2p.expose.3000=ip:192.168.1.100 \
+  my-app:latest
+
+# IP exposure with default localhost (when IP not specified)
+docker run -d --name local-service \
+  --network my-i2p-network \
+  --label i2p.expose.5000=ip \
+  api-server:latest
+# Port 5000 exposed on 127.0.0.1:5000
+```
+
+#### Network-Level Configuration
+
+```bash
+# Create network with IP exposure as default
+docker network create --driver=i2p \
+  --opt i2p.exposure.default=ip \
+  --opt i2p.exposure.allow_ip=true \
+  development-network
+
+# All ports will default to IP exposure unless explicitly configured
+docker run -d --name dev-app \
+  --network development-network \
+  --expose 3000 \
+  node-app:latest
+# Port 3000 exposed on 127.0.0.1:3000 (network default)
+
+# Create network with IP exposure disabled (I2P only)
+docker network create --driver=i2p \
+  --opt i2p.exposure.allow_ip=false \
+  secure-i2p-network
+
+# Any IP exposure requests will be forced to I2P
+docker run -d --name secure-service \
+  --network secure-i2p-network \
+  --label i2p.expose.80=ip:0.0.0.0 \
+  web-app:latest
+# Port 80 forced to I2P despite IP label (policy enforced)
+```
+
+#### Use Cases for Selective Exposure
+
+**Development and Testing**:
+```bash
+# Create development network with mixed exposure
+docker network create --driver=i2p \
+  --opt i2p.exposure.default=ip \
+  dev-network
+
+# Frontend exposed locally for development
+docker run -d --name frontend-dev \
+  --network dev-network \
+  --label i2p.expose.3000=ip:127.0.0.1 \
+  --label i2p.expose.3001=ip:127.0.0.1 \
+  -v $(pwd)/frontend:/app \
+  frontend:dev
+
+# Backend exposed on I2P for testing
+docker run -d --name backend-dev \
+  --network dev-network \
+  --label i2p.expose.8080=i2p \
+  backend:latest
+
+# Access frontend locally: http://localhost:3000
+# Access backend via I2P: http://<generated>.b32.i2p:8080
+```
+
+**Hybrid Deployments**:
+```bash
+# Create network allowing both exposure types
+docker network create --driver=i2p hybrid-network
+
+# Public API on I2P, admin interface on localhost
+docker run -d --name api-server \
+  --network hybrid-network \
+  --label i2p.expose.8080=i2p \
+  --label i2p.expose.9090=ip:127.0.0.1 \
+  api-app:latest
+
+# Public API accessible via I2P: http://<generated>.b32.i2p:8080
+# Admin interface local only: http://localhost:9090
+```
+
+**Multi-Interface Exposure**:
+```bash
+# Expose service on specific network interfaces
+docker run -d --name multi-interface \
+  --network my-i2p-network \
+  --label i2p.expose.80=i2p \
+  --label i2p.expose.443=ip:192.168.1.100 \
+  --label i2p.expose.8080=ip:10.0.0.50 \
+  web-app:latest
+
+# Port 80: I2P network
+# Port 443: 192.168.1.100:443
+# Port 8080: 10.0.0.50:8080
+```
+
+#### IPv6 Support
+
+```bash
+# Expose service on IPv6 address
+docker run -d --name ipv6-service \
+  --network my-i2p-network \
+  --label i2p.expose.8080=ip:::1 \
+  --label i2p.expose.8443=ip:fe80::1 \
+  app:latest
+
+# Port 8080 exposed on ::1 (IPv6 localhost)
+# Port 8443 exposed on fe80::1 (link-local)
+```
+
+#### Priority and Precedence
+
+Port exposure configuration follows this priority order:
+
+1. **Container Labels** (`i2p.expose.*`) - Highest priority
+2. **Docker EXPOSE Directives** - Medium priority  
+3. **Environment Variables** (`PORT`, `HTTP_PORT`, etc.) - Lowest priority
+
+```bash
+# Container with multiple port sources
+docker run -d --name priority-test \
+  --network my-i2p-network \
+  --label i2p.expose.80=ip:127.0.0.1 \
+  --expose 80 \
+  --expose 443 \
+  -e PORT=8080 \
+  nginx:alpine
+
+# Result:
+# Port 80: ip:127.0.0.1 (from label - highest priority)
+# Port 443: I2P (from EXPOSE - defaults to I2P)
+# Port 8080: I2P (from ENV - defaults to I2P)
+```
+
 ## Traffic Filtering
 
 ### Allowlist Configuration
