@@ -321,8 +321,7 @@ func (sem *ServiceExposureManager) ExposeServices(containerID string, networkID 
 	for _, port := range ports {
 		exposure, err := sem.createServiceExposure(containerID, networkID, containerIP, port)
 		if err != nil {
-			// TODO: Fix multiple server tunnels limitation - see KNOWN_ISSUES.md
-			// Current go-sam-go library only supports one stream sub-session per primary session
+			// Note: Using go-sam-go NewStreamSubSessionWithPort for multiple server tunnels
 			log.Printf("Warning: Failed to expose service on port %d for container %s: %v", port.ContainerPort, containerID, err)
 			continue
 		}

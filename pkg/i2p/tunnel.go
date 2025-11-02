@@ -352,7 +352,8 @@ func (tm *TunnelManager) createClientTunnel(tunnel *Tunnel) error {
 
 	// Create a stream sub-session for this client tunnel
 	// This will be used to establish outbound connections to I2P destinations
-	streamSession, err := primarySession.NewStreamSubSession(subSessionID, []string{})
+	// Use port-specific sub-session to avoid conflicts with multiple tunnels
+	streamSession, err := primarySession.NewStreamSubSessionWithPort(subSessionID, []string{}, config.LocalPort, config.LocalPort)
 	if err != nil {
 		return fmt.Errorf("failed to create stream sub-session for client tunnel %s: %w", config.Name, err)
 	}
@@ -386,7 +387,8 @@ func (tm *TunnelManager) createServerTunnel(tunnel *Tunnel) error {
 
 	// Create a stream sub-session for this server tunnel
 	// This will create an I2P destination that can accept inbound connections
-	streamSession, err := primarySession.NewStreamSubSession(subSessionID, []string{})
+	// Use port-specific sub-session to support multiple server tunnels per container
+	streamSession, err := primarySession.NewStreamSubSessionWithPort(subSessionID, []string{}, config.LocalPort, config.LocalPort)
 	if err != nil {
 		return fmt.Errorf("failed to create stream sub-session for server tunnel %s: %w", config.Name, err)
 	}

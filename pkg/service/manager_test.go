@@ -424,13 +424,17 @@ func TestExposeServices(t *testing.T) {
 	networkID := "test-network"
 	containerIP := net.ParseIP("172.20.0.2")
 
-	// Note: Testing only one server tunnel due to go-sam-go library limitation
-	// Multiple server tunnels require separate primary sessions (see KNOWN_ISSUES.md)
+	// Test multiple server tunnels with go-sam-go NewStreamSubSessionWithPort support
 	ports := []ExposedPort{
 		{
 			ContainerPort: 80,
 			Protocol:      "tcp",
 			ServiceName:   "web",
+		},
+		{
+			ContainerPort: 443,
+			Protocol:      "tcp",
+			ServiceName:   "https",
 		},
 	}
 

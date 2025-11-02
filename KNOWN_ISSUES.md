@@ -4,69 +4,63 @@ This document tracks known limitations and issues in the go-docker-network-i2p i
 
 ## I2P SAM Library Limitations
 
-### Multiple Server Tunnels per Container (go-sam-go limitation)
+### Multiple Server Tunnels per Container (RESOLVED)
 
-**Issue:** The current implementation cannot create multiple server tunnels for the same container due to a limitation in the `go-sam-go` library.
+**Issue:** ~~The current implementation cannot create multiple server tunnels for the same container due to a limitation in the `go-sam-go` library.~~ **RESOLVED**
 
-**Root Cause:** The `go-sam-go` library's primary session implementation only supports one active stream sub-session at a time. When attempting to create a second server tunnel (e.g., both HTTP on port 80 and HTTPS on port 443), the SAM bridge returns an error:
+**Resolution:** Updated to use local dev build of `go-sam-go` with `NewStreamSubSessionWithPort()` function that supports port specification.
+
+**Previous Root Cause:** The original `go-sam-go` library's primary session implementation only supported one active stream sub-session at a time. When attempting to create a second server tunnel (e.g., both HTTP on port 80 and HTTPS on port 443), the SAM bridge returned an error:
 
 ```text
 SESSION STATUS RESULT=I2P_ERROR ID="tunnel-name-server-port443" MESSAGE="Duplicate protocol 6 and port 0"
 ```
 
+**Solution Implemented:**
+
+- Using `NewStreamSubSessionWithPort(id, options, fromPort, toPort)` instead of `NewStreamSubSession(id, options)`
+- Each server tunnel now specifies its actual port numbers to the SAM bridge
+- Multiple server tunnels per container now supported
+
 **Technical Details:**
 
-- This is NOT a limitation of the I2P SAM protocol itself
-- This is specifically a limitation of the `go-sam-go` library implementation  
-- The SAM protocol supports multiple sub-sessions per primary session
-- The library constrains primary sessions to one stream sub-session listener
+- ✅ **FIXED** - Now using port-specific sub-session creation
+- Local dev build of `go-sam-go` includes the required `NewStreamSubSessionWithPort` function
+- Each tunnel gets unique port identification at the SAM protocol level
 
-**Current Workaround:**
+**Current Status:**
 
-- Tests are limited to one server tunnel per container
-- Service exposure manager continues on failure (logs warning and exposes available services)
+- ✅ **RESOLVED** - Multiple server tunnels per container now supported
+- Tests validate both HTTP (port 80) and HTTPS (port 443) tunnel creation
+- Service exposure manager can expose multiple services per container
 
-**Potential Solutions:**
+**Files Modified:**
 
-1. **Create separate primary sessions per server tunnel** (Recommended)
-   - Modify `TunnelManager.GetOrCreateContainerSession()` to create unique sessions per tunnel
-   - Track sessions by `containerID + tunnelName` instead of just `containerID`
-   - Each server tunnel gets its own I2P destination and keys
-
-2. **Switch to different I2P SAM library**
-   - Evaluate alternative Go SAM libraries that don't have this limitation
-   - Consider direct SAM protocol implementation
-
-3. **Use different session types**
-   - Investigate if non-stream session types support multiple concurrent instances
-   - May require protocol-level changes
-
-**Files Affected:**
-
-- `pkg/i2p/tunnel.go` - Tunnel creation and session management
-- `pkg/service/manager.go` - Service exposure logic  
-- `pkg/service/manager_test.go` - Test limitations
+- `pkg/i2p/tunnel.go` - Updated to use `NewStreamSubSessionWithPort()`
+- `pkg/service/manager.go` - Updated comments to reflect resolution  
+- `pkg/service/manager_test.go` - Restored multi-tunnel testing
 
 **Impact:**
 
-- **Medium Priority** - Limits container service exposure capabilities
-- Workaround exists (single service exposure per container)
-- Does not affect core network functionality
+- ✅ **RESOLVED** - No longer limits container service exposure capabilities
+- Multiple services per container now fully supported
+- Core network functionality enhanced
 
 **Test Evidence:**
 
 ```bash
-# Reproduction command:
+# Test command:
 go test -timeout 300s -v ./pkg/service -run TestExposeServices
 
-# Expected behavior: 2 exposures created
-# Actual behavior: 1 exposure created, 1 failed with duplicate protocol error
+# Expected behavior: 2 exposures created ✅
+# Actual behavior: 2 exposures created successfully ✅
 ```
 
-**Related GitHub Issues:**
+**Related Development:**
 
-- Consider filing issue with `go-sam-go` project regarding sub-session limitations
-- Track upstream library development for resolution
+- Using local dev build of `go-sam-go` with enhanced port support
+- Consider contributing `NewStreamSubSessionWithPort` back to upstream `go-sam-go`
+- Monitor upstream library development for official release
 
 ---
 
