@@ -36,6 +36,7 @@ Thumbs.db
 # Plugin files
 dist/
 *.tar.gz
+*.tmp
 
 # Docker plugin specific
 plugin.json.tmp
