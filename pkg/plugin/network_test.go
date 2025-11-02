@@ -455,3 +455,228 @@ func createMockTunnelManager(t *testing.T) *i2p.TunnelManager {
 
 	return i2p.NewTunnelManager(samClient)
 }
+
+// TestParseNetworkExposureConfig tests network exposure configuration parsing.
+func TestParseNetworkExposureConfig(t *testing.T) {
+	tests := []struct {
+		name                    string
+		options                 map[string]interface{}
+		expectedDefaultType     string
+		expectedAllowIPExposure bool
+	}{
+		{
+			name:                    "nil options defaults to I2P with IP allowed",
+			options:                 nil,
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name:                    "empty options defaults to I2P with IP allowed",
+			options:                 map[string]interface{}{},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "explicit I2P default",
+			options: map[string]interface{}{
+				"i2p.exposure.default": "i2p",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "explicit IP default",
+			options: map[string]interface{}{
+				"i2p.exposure.default": "ip",
+			},
+			expectedDefaultType:     "ip",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "disallow IP exposure",
+			options: map[string]interface{}{
+				"i2p.exposure.allow_ip": "false",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: false,
+		},
+		{
+			name: "allow IP exposure with 'true'",
+			options: map[string]interface{}{
+				"i2p.exposure.allow_ip": "true",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "allow IP exposure with '1'",
+			options: map[string]interface{}{
+				"i2p.exposure.allow_ip": "1",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "allow IP exposure with 'yes'",
+			options: map[string]interface{}{
+				"i2p.exposure.allow_ip": "yes",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "combined settings - IP default with IP allowed",
+			options: map[string]interface{}{
+				"i2p.exposure.default":  "ip",
+				"i2p.exposure.allow_ip": "true",
+			},
+			expectedDefaultType:     "ip",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "combined settings - IP default with IP disallowed",
+			options: map[string]interface{}{
+				"i2p.exposure.default":  "ip",
+				"i2p.exposure.allow_ip": "false",
+			},
+			expectedDefaultType:     "ip",
+			expectedAllowIPExposure: false,
+		},
+		{
+			name: "invalid exposure type defaults to I2P",
+			options: map[string]interface{}{
+				"i2p.exposure.default": "invalid",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "non-string option types handled gracefully",
+			options: map[string]interface{}{
+				"i2p.exposure.default":  123,
+				"i2p.exposure.allow_ip": 456,
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := parseNetworkExposureConfig(tt.options)
+
+			if string(config.DefaultExposureType) != tt.expectedDefaultType {
+				t.Errorf("Expected default exposure type %s, got %s",
+					tt.expectedDefaultType, config.DefaultExposureType)
+			}
+
+			if config.AllowIPExposure != tt.expectedAllowIPExposure {
+				t.Errorf("Expected AllowIPExposure %v, got %v",
+					tt.expectedAllowIPExposure, config.AllowIPExposure)
+			}
+		})
+	}
+}
+
+// TestNetworkCreationWithExposureConfig tests that networks are created with proper exposure configuration.
+func TestNetworkCreationWithExposureConfig(t *testing.T) {
+	tunnelMgr := createMockTunnelManager(t)
+	nm, err := NewNetworkManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create network manager: %v", err)
+	}
+
+	tests := []struct {
+		name                    string
+		networkID               string
+		options                 map[string]interface{}
+		expectedDefaultType     string
+		expectedAllowIPExposure bool
+	}{
+		{
+			name:      "network with default I2P exposure",
+			networkID: "test-network-config-1",
+			options: map[string]interface{}{
+				"com.docker.network.bridge.name": "i2p-br0",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name:      "network with explicit IP default",
+			networkID: "test-network-config-2",
+			options: map[string]interface{}{
+				"com.docker.network.bridge.name": "i2p-br1",
+				"i2p.exposure.default":           "ip",
+			},
+			expectedDefaultType:     "ip",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name:      "network with IP exposure disabled",
+			networkID: "test-network-config-3",
+			options: map[string]interface{}{
+				"com.docker.network.bridge.name": "i2p-br2",
+				"i2p.exposure.allow_ip":          "false",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: false,
+		},
+		{
+			name:      "network with IP default but IP disallowed",
+			networkID: "test-network-config-4",
+			options: map[string]interface{}{
+				"com.docker.network.bridge.name": "i2p-br3",
+				"i2p.exposure.default":           "ip",
+				"i2p.exposure.allow_ip":          "false",
+			},
+			expectedDefaultType:     "ip",
+			expectedAllowIPExposure: false,
+		},
+	}
+
+	// Create all networks first (proxy manager starts with first network)
+	ipamData := []IPAMData{
+		{
+			Pool:    "172.20.0.0/16",
+			Gateway: "172.20.0.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := nm.CreateNetwork(tt.networkID, tt.options, ipamData)
+			if err != nil {
+				// Skip test if iptables not available (expected in test environments)
+				if err.Error() == "failed to start proxy manager: iptables not available: iptables command not found: exec: \"iptables\": executable file not found in $PATH" {
+					t.Skip("Skipping test: iptables not available in test environment")
+				}
+				t.Fatalf("Failed to create network: %v", err)
+			}
+
+			network := nm.GetNetwork(tt.networkID)
+			if network == nil {
+				t.Fatal("Network not found after creation")
+			}
+
+			if string(network.ExposureConfig.DefaultExposureType) != tt.expectedDefaultType {
+				t.Errorf("Expected network default exposure type %s, got %s",
+					tt.expectedDefaultType, network.ExposureConfig.DefaultExposureType)
+			}
+
+			if network.ExposureConfig.AllowIPExposure != tt.expectedAllowIPExposure {
+				t.Errorf("Expected network AllowIPExposure %v, got %v",
+					tt.expectedAllowIPExposure, network.ExposureConfig.AllowIPExposure)
+			}
+		})
+	}
+
+	// Clean up all networks at the end
+	for _, tt := range tests {
+		if nm.GetNetwork(tt.networkID) != nil {
+			if err := nm.DeleteNetwork(tt.networkID); err != nil {
+				t.Logf("Warning: Failed to delete network %s: %v", tt.networkID, err)
+			}
+		}
+	}
+}

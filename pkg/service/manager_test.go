@@ -1259,3 +1259,312 @@ func TestIsPortConfigured(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateIPServiceExposure tests IP-based service exposure creation.
+func TestCreateIPServiceExposure(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager, err := NewServiceExposureManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create service exposure manager: %v", err)
+	}
+
+	containerID := "test-container-123456789012"
+	containerIP := net.ParseIP("172.20.0.5")
+
+	tests := []struct {
+		name        string
+		port        ExposedPort
+		shouldError bool
+		validate    func(t *testing.T, exposure *ServiceExposure, err error)
+	}{
+		{
+			name: "valid IP exposure with explicit target",
+			port: ExposedPort{
+				ContainerPort: 80,
+				Protocol:      "tcp",
+				ServiceName:   "web",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "127.0.0.1",
+			},
+			shouldError: false,
+			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+				if err != nil {
+					t.Fatalf("Expected no error, got: %v", err)
+				}
+				if exposure == nil {
+					t.Fatal("Expected exposure to be created")
+				}
+				if exposure.Tunnel != nil {
+					t.Error("IP exposure should not have I2P tunnel")
+				}
+				if exposure.Destination != "127.0.0.1:80" {
+					t.Errorf("Expected destination 127.0.0.1:80, got %s", exposure.Destination)
+				}
+				if !strings.HasPrefix(exposure.TunnelName, "ip-") {
+					t.Errorf("Expected tunnel name to start with 'ip-', got %s", exposure.TunnelName)
+				}
+				if exposure.ContainerID != containerID {
+					t.Errorf("Expected container ID %s, got %s", containerID, exposure.ContainerID)
+				}
+			},
+		},
+		{
+			name: "IP exposure defaults to localhost",
+			port: ExposedPort{
+				ContainerPort: 443,
+				Protocol:      "tcp",
+				ServiceName:   "https",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "", // Empty - should default
+			},
+			shouldError: false,
+			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+				if err != nil {
+					t.Fatalf("Expected no error, got: %v", err)
+				}
+				if exposure.Destination != "127.0.0.1:443" {
+					t.Errorf("Expected default destination 127.0.0.1:443, got %s", exposure.Destination)
+				}
+			},
+		},
+		{
+			name: "IP exposure with external IP",
+			port: ExposedPort{
+				ContainerPort: 8080,
+				Protocol:      "tcp",
+				ServiceName:   "api",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "0.0.0.0",
+			},
+			shouldError: false,
+			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+				if err != nil {
+					t.Fatalf("Expected no error, got: %v", err)
+				}
+				if exposure.Destination != "0.0.0.0:8080" {
+					t.Errorf("Expected destination 0.0.0.0:8080, got %s", exposure.Destination)
+				}
+			},
+		},
+		{
+			name: "IP exposure with IPv6 address",
+			port: ExposedPort{
+				ContainerPort: 9090,
+				Protocol:      "tcp",
+				ServiceName:   "metrics",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "::1",
+			},
+			shouldError: false,
+			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+				if err != nil {
+					t.Fatalf("Expected no error, got: %v", err)
+				}
+				if exposure.Destination != "::1:9090" {
+					t.Errorf("Expected destination ::1:9090, got %s", exposure.Destination)
+				}
+			},
+		},
+		{
+			name: "invalid target IP address",
+			port: ExposedPort{
+				ContainerPort: 80,
+				Protocol:      "tcp",
+				ServiceName:   "web",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "invalid-ip",
+			},
+			shouldError: true,
+			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+				if err == nil {
+					t.Error("Expected error for invalid IP address")
+				}
+				if !strings.Contains(err.Error(), "invalid target IP address") {
+					t.Errorf("Expected error about invalid IP, got: %v", err)
+				}
+				if exposure != nil {
+					t.Error("Expected no exposure to be created for invalid IP")
+				}
+			},
+		},
+		{
+			name: "IP exposure with specific network interface",
+			port: ExposedPort{
+				ContainerPort: 3000,
+				Protocol:      "tcp",
+				ServiceName:   "dev",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "192.168.1.100",
+			},
+			shouldError: false,
+			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+				if err != nil {
+					t.Fatalf("Expected no error, got: %v", err)
+				}
+				if exposure.Destination != "192.168.1.100:3000" {
+					t.Errorf("Expected destination 192.168.1.100:3000, got %s", exposure.Destination)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exposure, err := manager.createIPServiceExposure(containerID, containerIP, tt.port)
+			tt.validate(t, exposure, err)
+		})
+	}
+}
+
+// TestExposeServicesWithMixedTypes tests ExposeServices with both I2P and IP exposure types.
+func TestExposeServicesWithMixedTypes(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	// Connect to SAM bridge
+	ctx := context.Background()
+	if err := samClient.Connect(ctx); err != nil {
+		t.Fatalf("Failed to connect SAM client: %v", err)
+	}
+	defer samClient.Disconnect()
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager, err := NewServiceExposureManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create service exposure manager: %v", err)
+	}
+
+	containerID := "test-container-mixed"
+	networkID := "test-network"
+	containerIP := net.ParseIP("172.20.0.10")
+
+	// Test with mixed exposure types
+	ports := []ExposedPort{
+		{
+			ContainerPort: 80,
+			Protocol:      "tcp",
+			ServiceName:   "web",
+			ExposureType:  ExposureTypeI2P,
+		},
+		{
+			ContainerPort: 443,
+			Protocol:      "tcp",
+			ServiceName:   "https",
+			ExposureType:  ExposureTypeIP,
+			TargetIP:      "127.0.0.1",
+		},
+		{
+			ContainerPort: 8080,
+			Protocol:      "tcp",
+			ServiceName:   "api",
+			ExposureType:  ExposureTypeIP,
+			TargetIP:      "0.0.0.0",
+		},
+	}
+
+	exposures, err := manager.ExposeServices(containerID, networkID, containerIP, ports)
+	if err != nil {
+		t.Fatalf("Failed to expose services: %v", err)
+	}
+
+	if len(exposures) != 3 {
+		t.Fatalf("Expected 3 exposures, got %d", len(exposures))
+	}
+
+	// Verify I2P exposure
+	i2pExposure := exposures[0]
+	if i2pExposure.Tunnel == nil {
+		t.Error("I2P exposure should have a tunnel")
+	}
+	if !strings.HasSuffix(i2pExposure.Destination, ".b32.i2p") {
+		t.Errorf("I2P exposure should have .b32.i2p destination, got %s", i2pExposure.Destination)
+	}
+
+	// Verify IP exposures
+	for i := 1; i < 3; i++ {
+		if exposures[i].Tunnel != nil {
+			t.Errorf("IP exposure %d should not have a tunnel", i)
+		}
+		if !strings.HasPrefix(exposures[i].TunnelName, "ip-") {
+			t.Errorf("IP exposure %d should have 'ip-' prefix in tunnel name, got %s", i, exposures[i].TunnelName)
+		}
+	}
+
+	// Verify destinations
+	if exposures[1].Destination != "127.0.0.1:443" {
+		t.Errorf("Expected destination 127.0.0.1:443, got %s", exposures[1].Destination)
+	}
+	if exposures[2].Destination != "0.0.0.0:8080" {
+		t.Errorf("Expected destination 0.0.0.0:8080, got %s", exposures[2].Destination)
+	}
+
+	// Clean up
+	err = manager.CleanupServices(containerID)
+	if err != nil {
+		t.Errorf("Failed to cleanup services: %v", err)
+	}
+}
+
+// TestExposeServicesDefaultType tests that unspecified exposure type defaults to I2P.
+func TestExposeServicesDefaultType(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := samClient.Connect(ctx); err != nil {
+		t.Fatalf("Failed to connect SAM client: %v", err)
+	}
+	defer samClient.Disconnect()
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager, err := NewServiceExposureManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create service exposure manager: %v", err)
+	}
+
+	containerID := "test-container-default"
+	networkID := "test-network"
+	containerIP := net.ParseIP("172.20.0.11")
+
+	// Port with no explicit exposure type
+	ports := []ExposedPort{
+		{
+			ContainerPort: 80,
+			Protocol:      "tcp",
+			ServiceName:   "web",
+			ExposureType:  "", // Empty - should default to I2P
+		},
+	}
+
+	exposures, err := manager.ExposeServices(containerID, networkID, containerIP, ports)
+	if err != nil {
+		t.Fatalf("Failed to expose services: %v", err)
+	}
+
+	if len(exposures) != 1 {
+		t.Fatalf("Expected 1 exposure, got %d", len(exposures))
+	}
+
+	// Should default to I2P exposure
+	if exposures[0].Tunnel == nil {
+		t.Error("Default exposure should be I2P with tunnel")
+	}
+	if !strings.HasSuffix(exposures[0].Destination, ".b32.i2p") {
+		t.Errorf("Default exposure should have .b32.i2p destination, got %s", exposures[0].Destination)
+	}
+
+	// Clean up
+	err = manager.CleanupServices(containerID)
+	if err != nil {
+		t.Errorf("Failed to cleanup services: %v", err)
+	}
+}

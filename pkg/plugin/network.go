@@ -42,6 +42,12 @@ type I2PNetwork struct {
 	// IPAllocator manages IP address allocation for containers
 	IPAllocator *IPAllocator
 
+	// Options stores network-level configuration options
+	Options map[string]interface{}
+
+	// ExposureConfig defines service exposure defaults for this network
+	ExposureConfig service.NetworkExposureConfig
+
 	// mutex protects concurrent access to network state
 	mutex sync.RWMutex
 }
@@ -165,15 +171,20 @@ func (nm *NetworkManager) CreateNetwork(networkID string, options map[string]int
 	// Create IP allocator for this network
 	ipAllocator := NewIPAllocator(subnet, gateway)
 
+	// Parse network-level exposure configuration
+	exposureConfig := parseNetworkExposureConfig(options)
+
 	// Create the network
 	network := &I2PNetwork{
-		ID:            networkID,
-		Name:          getNetworkName(options),
-		Subnet:        subnet,
-		Gateway:       gateway,
-		TunnelManager: tunnelManager,
-		Endpoints:     make(map[string]*I2PEndpoint),
-		IPAllocator:   ipAllocator,
+		ID:             networkID,
+		Name:           getNetworkName(options),
+		Subnet:         subnet,
+		Gateway:        gateway,
+		TunnelManager:  tunnelManager,
+		Endpoints:      make(map[string]*I2PEndpoint),
+		IPAllocator:    ipAllocator,
+		Options:        options,
+		ExposureConfig: exposureConfig,
 	}
 
 	// Store the network
@@ -401,21 +412,37 @@ func (nm *NetworkManager) JoinEndpoint(networkID, endpointID, containerID, sandb
 	// Update endpoint with container information
 	endpoint.ContainerID = containerID
 
-	// Detect and expose I2P services for this container
+	// Detect and expose services for this container
 	if options != nil {
 		exposedPorts, err := nm.serviceMgr.DetectExposedPorts(containerID, options)
 		if err != nil {
 			log.Printf("Warning: Failed to detect exposed ports for container %s: %v", containerID, err)
 		} else if len(exposedPorts) > 0 {
-			log.Printf("Container %s has %d exposed ports, creating I2P service exposures", containerID, len(exposedPorts))
+			// Apply network-level exposure defaults to ports without explicit configuration
+			for i := range exposedPorts {
+				if exposedPorts[i].ExposureType == "" {
+					exposedPorts[i].ExposureType = network.ExposureConfig.DefaultExposureType
+					log.Printf("Applied network default exposure type %s to port %d",
+						network.ExposureConfig.DefaultExposureType, exposedPorts[i].ContainerPort)
+				}
+
+				// Check if IP exposure is allowed when port requests it
+				if exposedPorts[i].ExposureType == service.ExposureTypeIP && !network.ExposureConfig.AllowIPExposure {
+					log.Printf("Warning: IP exposure requested for port %d but not allowed by network policy, defaulting to I2P",
+						exposedPorts[i].ContainerPort)
+					exposedPorts[i].ExposureType = service.ExposureTypeI2P
+				}
+			}
+
+			log.Printf("Container %s has %d exposed ports, creating service exposures", containerID, len(exposedPorts))
 
 			exposures, err := nm.serviceMgr.ExposeServices(containerID, networkID, endpoint.IPAddress, exposedPorts)
 			if err != nil {
 				log.Printf("Warning: Failed to expose services for container %s: %v", containerID, err)
 			} else {
-				log.Printf("Successfully exposed %d I2P services for container %s", len(exposures), containerID)
+				log.Printf("Successfully exposed %d services for container %s", len(exposures), containerID)
 
-				// Log the .b32.i2p addresses for user visibility
+				// Log the service addresses for user visibility
 				for _, exposure := range exposures {
 					log.Printf("Service %s:%d exposed as %s", containerID, exposure.Port.ContainerPort, exposure.Destination)
 				}
@@ -686,6 +713,48 @@ func (nm *NetworkManager) deleteEndpointInternal(network *I2PNetwork, endpointID
 	delete(network.Endpoints, endpointID)
 
 	return nil
+}
+
+// parseNetworkExposureConfig extracts exposure configuration from network options.
+//
+// This function parses Docker network creation options to determine:
+// - Default exposure type for containers on this network
+// - Whether IP-based exposure is allowed
+//
+// Configuration options:
+//   - i2p.exposure.default: "i2p" or "ip" (default: "i2p")
+//   - i2p.exposure.allow_ip: "true" or "false" (default: "true")
+func parseNetworkExposureConfig(options map[string]interface{}) service.NetworkExposureConfig {
+	config := service.NetworkExposureConfig{
+		DefaultExposureType: service.ExposureTypeI2P, // Default to I2P exposure
+		AllowIPExposure:     true,                    // Allow IP exposure by default
+	}
+
+	if options == nil {
+		return config
+	}
+
+	// Check for default exposure mode setting
+	if exposureMode, ok := options["i2p.exposure.default"]; ok {
+		if mode, ok := exposureMode.(string); ok {
+			// Only change default if explicitly set to "ip"
+			if mode == "ip" {
+				config.DefaultExposureType = service.ExposureTypeIP
+				log.Printf("Network default exposure type set to IP")
+			}
+		}
+	}
+
+	// Check for IP exposure permission setting
+	if allowIP, ok := options["i2p.exposure.allow_ip"]; ok {
+		if allow, ok := allowIP.(string); ok {
+			// Parse boolean-like strings
+			config.AllowIPExposure = (allow == "true" || allow == "1" || allow == "yes")
+			log.Printf("Network IP exposure allowed: %v", config.AllowIPExposure)
+		}
+	}
+
+	return config
 }
 
 // Shutdown gracefully shuts down the NetworkManager and all associated resources.

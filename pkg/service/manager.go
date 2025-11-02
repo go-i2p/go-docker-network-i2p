@@ -442,10 +442,68 @@ func (sem *ServiceExposureManager) isPortConfigured(port int, configuredPorts []
 	return false
 }
 
-// ExposeServices creates I2P server tunnels for the specified exposed ports.
+// createIPServiceExposure creates an IP-based service exposure.
 //
-// This method creates I2P server tunnels for each exposed port and generates
-// .b32.i2p addresses that external users can use to access the services.
+// This method creates a ServiceExposure record for IP-based port forwarding.
+// Unlike I2P exposures, IP exposures do not create I2P tunnels - they simply
+// record the intention to expose a container port to a specific IP address.
+// The actual port forwarding implementation is a stub for now and will be
+// implemented in a future phase.
+//
+// Why this approach:
+// - Maintains consistent ServiceExposure tracking for all exposure types
+// - Allows the system to be aware of all port exposures regardless of type
+// - Provides a foundation for future port forwarding implementation
+// - Keeps the interface simple and predictable
+func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
+	// Validate target IP - use default if not specified
+	targetIP := port.TargetIP
+	if targetIP == "" {
+		targetIP = "127.0.0.1" // Default to localhost for security
+	}
+
+	// Validate target IP format
+	if net.ParseIP(targetIP) == nil {
+		return nil, fmt.Errorf("invalid target IP address: %s", targetIP)
+	}
+
+	// Create a unique identifier for this IP exposure
+	exposureName := fmt.Sprintf("ip-%s-%d", containerID[:12], port.ContainerPort)
+
+	// Create ServiceExposure record
+	// Note: Tunnel is nil for IP exposures as no I2P tunnel is needed
+	exposure := &ServiceExposure{
+		ContainerID: containerID,
+		Port:        port,
+		Tunnel:      nil, // No I2P tunnel for IP exposure
+		Destination: fmt.Sprintf("%s:%d", targetIP, port.ContainerPort),
+		TunnelName:  exposureName,
+	}
+
+	log.Printf("Created IP service exposure: %s -> container %s:%d targeting %s:%d",
+		exposureName, containerIP.String(), port.ContainerPort, targetIP, port.ContainerPort)
+
+	return exposure, nil
+}
+
+// createI2PServiceExposure creates an I2P-based service exposure.
+//
+// This method wraps the existing createServiceExposure logic and is named
+// explicitly to distinguish it from IP-based exposures. It creates an I2P
+// server tunnel that allows external I2P users to access the container service.
+func (sem *ServiceExposureManager) createI2PServiceExposure(containerID string, networkID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
+	return sem.createServiceExposure(containerID, networkID, containerIP, port)
+}
+
+// ExposeServices creates service exposures for the specified ports based on their exposure type.
+//
+// This method supports two exposure types:
+// - I2P exposure: Creates I2P server tunnels with .b32.i2p addresses
+// - IP exposure: Records IP-based port forwarding intentions (stub for now)
+//
+// The method routes each port to the appropriate exposure handler based on
+// its ExposureType field. If no ExposureType is specified, it defaults to
+// I2P exposure for backward compatibility.
 func (sem *ServiceExposureManager) ExposeServices(containerID string, networkID string, containerIP net.IP, ports []ExposedPort) ([]*ServiceExposure, error) {
 	if containerID == "" {
 		return nil, fmt.Errorf("container ID cannot be empty")
@@ -463,16 +521,30 @@ func (sem *ServiceExposureManager) ExposeServices(containerID string, networkID 
 	var exposures []*ServiceExposure
 
 	for _, port := range ports {
-		exposure, err := sem.createServiceExposure(containerID, networkID, containerIP, port)
+		var exposure *ServiceExposure
+		var err error
+
+		// Route to appropriate exposure handler based on type
+		switch port.ExposureType {
+		case ExposureTypeI2P:
+			exposure, err = sem.createI2PServiceExposure(containerID, networkID, containerIP, port)
+		case ExposureTypeIP:
+			exposure, err = sem.createIPServiceExposure(containerID, containerIP, port)
+		default:
+			// Default to I2P for backward compatibility and unknown types
+			port.ExposureType = ExposureTypeI2P
+			exposure, err = sem.createI2PServiceExposure(containerID, networkID, containerIP, port)
+		}
+
 		if err != nil {
-			// Note: Using go-sam-go NewStreamSubSessionWithPort for multiple server tunnels
-			log.Printf("Warning: Failed to expose service on port %d for container %s: %v", port.ContainerPort, containerID, err)
+			log.Printf("Warning: Failed to expose %s service on port %d for container %s: %v",
+				port.ExposureType, port.ContainerPort, containerID, err)
 			continue
 		}
 
 		exposures = append(exposures, exposure)
-		log.Printf("Successfully exposed service %s for container %s on I2P destination %s",
-			exposure.TunnelName, containerID, exposure.Destination)
+		log.Printf("Successfully exposed %s service %s for container %s on %s",
+			port.ExposureType, exposure.TunnelName, containerID, exposure.Destination)
 	}
 
 	// Store exposures for this container
@@ -580,6 +652,12 @@ func (sem *ServiceExposureManager) CleanupServices(containerID string) error {
 
 	// Clean up all tunnels for this container
 	for _, exposure := range exposures {
+		// Skip IP exposures that don't have tunnels
+		if exposure.Tunnel == nil {
+			log.Printf("Skipping tunnel cleanup for IP exposure %s", exposure.TunnelName)
+			continue
+		}
+
 		if err := sem.tunnelMgr.DestroyTunnel(exposure.TunnelName); err != nil {
 			errors = append(errors, fmt.Sprintf("failed to destroy tunnel %s: %v", exposure.TunnelName, err))
 		}
