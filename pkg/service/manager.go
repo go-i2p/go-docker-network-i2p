@@ -116,10 +116,16 @@ func NewServiceExposureManager(tunnelMgr *i2p.TunnelManager) (*ServiceExposureMa
 // DetectExposedPorts analyzes container options to identify exposed ports.
 //
 // This method examines Docker container options and environment variables to
-// identify ports that should be exposed over I2P. It supports various formats:
-// - Docker EXPOSE directives
-// - Port mappings from container options
-// - Environment variables indicating exposed services
+// identify ports that should be exposed over I2P. It supports various formats
+// with priority-based configuration:
+// 1. Docker labels (i2p.expose.*) - highest priority
+// 2. Docker EXPOSE directives - medium priority
+// 3. Environment variables indicating exposed services - lowest priority
+//
+// Labels allow explicit control over exposure type (i2p or ip) and take
+// precedence over automatically detected ports. Ports detected from EXPOSE
+// directives and environment variables default to I2P exposure for backward
+// compatibility.
 func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, options map[string]interface{}) ([]ExposedPort, error) {
 	if containerID == "" {
 		return nil, fmt.Errorf("container ID cannot be empty")
@@ -127,21 +133,40 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 
 	var ports []ExposedPort
 
-	// Check for exposed ports in container options
+	// 1. Check for explicit label-based configuration (highest priority)
+	if labelPorts := sem.extractPortsFromLabels(options); len(labelPorts) > 0 {
+		ports = append(ports, labelPorts...)
+	}
+
+	// 2. Check for exposed ports in container options (medium priority)
 	if exposedPorts := sem.extractPortsFromOptions(options); len(exposedPorts) > 0 {
-		ports = append(ports, exposedPorts...)
+		// Only add ports not already configured via labels
+		for _, port := range exposedPorts {
+			if !sem.isPortConfigured(port.ContainerPort, ports) {
+				// Default to I2P exposure for auto-detected ports (backward compatibility)
+				port.ExposureType = ExposureTypeI2P
+				ports = append(ports, port)
+			}
+		}
 	}
 
-	// Check for environment variables indicating services
+	// 3. Check for environment variables indicating services (lowest priority)
 	if envPorts := sem.extractPortsFromEnvironment(options); len(envPorts) > 0 {
-		ports = append(ports, envPorts...)
+		for _, port := range envPorts {
+			if !sem.isPortConfigured(port.ContainerPort, ports) {
+				// Default to I2P exposure for auto-detected ports (backward compatibility)
+				port.ExposureType = ExposureTypeI2P
+				ports = append(ports, port)
+			}
+		}
 	}
 
-	// Deduplicate ports
+	// Deduplicate ports with exposure type consideration
 	seen := make(map[string]bool)
 	var uniquePorts []ExposedPort
 	for _, port := range ports {
-		key := fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol)
+		// Include ExposureType in uniqueness key to allow same port with different exposure types
+		key := fmt.Sprintf("%d/%s/%s", port.ContainerPort, port.Protocol, port.ExposureType)
 		if !seen[key] {
 			seen[key] = true
 			uniquePorts = append(uniquePorts, port)
@@ -402,6 +427,19 @@ func (sem *ServiceExposureManager) parseExposureLabel(key string, value interfac
 		ExposureType:  exposureType,
 		TargetIP:      targetIP,
 	}
+}
+
+// isPortConfigured checks if a port is already configured in the given list.
+//
+// This helper method is used to implement priority-based port configuration,
+// where labels take precedence over Docker EXPOSE directives and environment variables.
+func (sem *ServiceExposureManager) isPortConfigured(port int, configuredPorts []ExposedPort) bool {
+	for _, p := range configuredPorts {
+		if p.ContainerPort == port {
+			return true
+		}
+	}
+	return false
 }
 
 // ExposeServices creates I2P server tunnels for the specified exposed ports.

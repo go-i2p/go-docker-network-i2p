@@ -994,3 +994,268 @@ func BenchmarkExtractPortsFromLabels(b *testing.B) {
 		_ = manager.extractPortsFromLabels(options)
 	}
 }
+
+// TestDetectExposedPortsWithLabels tests the enhanced DetectExposedPorts with label integration.
+func TestDetectExposedPortsWithLabels(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager, err := NewServiceExposureManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create service exposure manager: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		containerID   string
+		options       map[string]interface{}
+		expectedPorts int
+		validate      func(t *testing.T, ports []ExposedPort)
+	}{
+		{
+			name:        "labels take priority over EXPOSE",
+			containerID: "test-container",
+			options: map[string]interface{}{
+				"Labels": map[string]interface{}{
+					"i2p.expose.80": "ip:127.0.0.1", // Label says IP
+				},
+				"ExposedPorts": map[string]interface{}{
+					"80/tcp": map[string]interface{}{}, // EXPOSE says port 80
+				},
+			},
+			expectedPorts: 1,
+			validate: func(t *testing.T, ports []ExposedPort) {
+				if ports[0].ExposureType != ExposureTypeIP {
+					t.Errorf("Expected IP exposure from label, got %s", ports[0].ExposureType)
+				}
+				if ports[0].TargetIP != "127.0.0.1" {
+					t.Errorf("Expected target IP 127.0.0.1, got %s", ports[0].TargetIP)
+				}
+			},
+		},
+		{
+			name:        "labels take priority over environment variables",
+			containerID: "test-container",
+			options: map[string]interface{}{
+				"Labels": map[string]interface{}{
+					"i2p.expose.8080": "i2p",
+				},
+				"Env": []interface{}{
+					"PORT=8080", // Env var also specifies 8080
+				},
+			},
+			expectedPorts: 1,
+			validate: func(t *testing.T, ports []ExposedPort) {
+				if ports[0].ExposureType != ExposureTypeI2P {
+					t.Errorf("Expected I2P exposure from label, got %s", ports[0].ExposureType)
+				}
+			},
+		},
+		{
+			name:        "non-labeled ports default to I2P",
+			containerID: "test-container",
+			options: map[string]interface{}{
+				"ExposedPorts": map[string]interface{}{
+					"80/tcp":  map[string]interface{}{},
+					"443/tcp": map[string]interface{}{},
+				},
+			},
+			expectedPorts: 2,
+			validate: func(t *testing.T, ports []ExposedPort) {
+				for _, port := range ports {
+					if port.ExposureType != ExposureTypeI2P {
+						t.Errorf("Expected default I2P exposure for port %d, got %s", port.ContainerPort, port.ExposureType)
+					}
+				}
+			},
+		},
+		{
+			name:        "mixed sources with labels, EXPOSE, and env vars",
+			containerID: "test-container",
+			options: map[string]interface{}{
+				"Labels": map[string]interface{}{
+					"i2p.expose.80":  "ip:0.0.0.0",
+					"i2p.expose.443": "i2p",
+				},
+				"ExposedPorts": map[string]interface{}{
+					"8080/tcp": map[string]interface{}{},
+					"80/tcp":   map[string]interface{}{}, // Should be ignored (label takes priority)
+				},
+				"Env": []interface{}{
+					"PORT=3000",
+					"HTTP_PORT=80", // Should be ignored (label takes priority)
+				},
+			},
+			expectedPorts: 4, // 2 from labels + 1 from EXPOSE (8080) + 1 from env (3000)
+			validate: func(t *testing.T, ports []ExposedPort) {
+				// Count exposure types
+				ipCount := 0
+				i2pCount := 0
+				for _, port := range ports {
+					switch port.ContainerPort {
+					case 80:
+						if port.ExposureType != ExposureTypeIP {
+							t.Errorf("Port 80 should be IP exposure from label, got %s", port.ExposureType)
+						}
+						ipCount++
+					case 443:
+						if port.ExposureType != ExposureTypeI2P {
+							t.Errorf("Port 443 should be I2P exposure from label, got %s", port.ExposureType)
+						}
+						i2pCount++
+					case 8080:
+						if port.ExposureType != ExposureTypeI2P {
+							t.Errorf("Port 8080 should default to I2P exposure, got %s", port.ExposureType)
+						}
+						i2pCount++
+					case 3000:
+						if port.ExposureType != ExposureTypeI2P {
+							t.Errorf("Port 3000 should default to I2P exposure, got %s", port.ExposureType)
+						}
+						i2pCount++
+					}
+				}
+				if ipCount != 1 {
+					t.Errorf("Expected 1 IP exposure, got %d", ipCount)
+				}
+				if i2pCount != 3 {
+					t.Errorf("Expected 3 I2P exposures, got %d", i2pCount)
+				}
+			},
+		},
+		{
+			name:        "deduplication includes exposure type",
+			containerID: "test-container",
+			options: map[string]interface{}{
+				"Labels": map[string]interface{}{
+					"i2p.expose.80": "i2p",
+				},
+				"ExposedPorts": map[string]interface{}{
+					"80/tcp": map[string]interface{}{}, // Same port, but would be I2P anyway
+				},
+			},
+			expectedPorts: 1, // Should deduplicate
+			validate: func(t *testing.T, ports []ExposedPort) {
+				if ports[0].ExposureType != ExposureTypeI2P {
+					t.Errorf("Expected I2P exposure, got %s", ports[0].ExposureType)
+				}
+			},
+		},
+		{
+			name:          "no ports configured",
+			containerID:   "test-container",
+			options:       map[string]interface{}{},
+			expectedPorts: 0,
+		},
+		{
+			name:        "backward compatibility - existing behavior unchanged",
+			containerID: "test-container",
+			options: map[string]interface{}{
+				"ExposedPorts": map[string]interface{}{
+					"80/tcp":   map[string]interface{}{},
+					"443/tcp":  map[string]interface{}{},
+					"8080/tcp": map[string]interface{}{},
+				},
+				"Env": []interface{}{
+					"PORT=3000",
+					"HTTP_PORT=9000",
+				},
+			},
+			expectedPorts: 5, // All ports detected
+			validate: func(t *testing.T, ports []ExposedPort) {
+				// All should default to I2P for backward compatibility
+				for _, port := range ports {
+					if port.ExposureType != ExposureTypeI2P {
+						t.Errorf("Port %d should default to I2P for backward compatibility, got %s",
+							port.ContainerPort, port.ExposureType)
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ports, err := manager.DetectExposedPorts(tt.containerID, tt.options)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if len(ports) != tt.expectedPorts {
+				t.Errorf("Expected %d ports, got %d", tt.expectedPorts, len(ports))
+				for i, p := range ports {
+					t.Logf("  Port %d: %d/%s (type: %s, target: %s)",
+						i, p.ContainerPort, p.Protocol, p.ExposureType, p.TargetIP)
+				}
+			}
+
+			if tt.validate != nil {
+				tt.validate(t, ports)
+			}
+		})
+	}
+}
+
+// TestIsPortConfigured tests the port configuration check helper.
+func TestIsPortConfigured(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager, err := NewServiceExposureManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create service exposure manager: %v", err)
+	}
+
+	configuredPorts := []ExposedPort{
+		{ContainerPort: 80, Protocol: "tcp", ExposureType: ExposureTypeI2P},
+		{ContainerPort: 443, Protocol: "tcp", ExposureType: ExposureTypeIP, TargetIP: "127.0.0.1"},
+		{ContainerPort: 8080, Protocol: "tcp", ExposureType: ExposureTypeI2P},
+	}
+
+	tests := []struct {
+		name     string
+		port     int
+		expected bool
+	}{
+		{
+			name:     "port is configured",
+			port:     80,
+			expected: true,
+		},
+		{
+			name:     "port is not configured",
+			port:     9090,
+			expected: false,
+		},
+		{
+			name:     "another configured port",
+			port:     443,
+			expected: true,
+		},
+		{
+			name:     "yet another configured port",
+			port:     8080,
+			expected: true,
+		},
+		{
+			name:     "unconfigured port",
+			port:     3000,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := manager.isPortConfigured(tt.port, configuredPorts)
+			if result != tt.expected {
+				t.Errorf("Expected isPortConfigured(%d) to be %v, got %v", tt.port, tt.expected, result)
+			}
+		})
+	}
+}
