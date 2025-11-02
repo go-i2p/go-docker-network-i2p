@@ -3,7 +3,7 @@ module github.com/go-i2p/go-docker-network-i2p
 go 1.24.4
 
 require (
-	github.com/go-i2p/go-sam-go v0.0.0-20251021005751-42c4c037320c
+	github.com/go-i2p/go-sam-go v0.33.0
 	github.com/miekg/dns v1.1.68
 )
 
@@ -25,6 +25,3 @@ require (
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
 )
-
-// replace github.com/go-i2p/go-sam-go => ../go-sam-go
-replace github.com/go-i2p/go-sam-go => ../go-sam-go
