@@ -81,7 +81,7 @@ sudo cp bin/i2p-network-plugin /usr/local/bin/
 sudo cp plugin.json /etc/docker/plugins/i2p.json
 
 # Start the plugin daemon
-sudo i2p-network-plugin -sock /run/docker/plugins/i2p.sock
+sudo i2p-network-plugin -sock /run/docker/plugins/i2p-network.sock
 ```
 
 ### Method 3: Development Testing

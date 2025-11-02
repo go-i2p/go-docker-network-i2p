@@ -52,7 +52,7 @@ RUN addgroup -g 1000 i2pplugin && \
 # USER i2pplugin
 
 # Plugin socket path
-ENV PLUGIN_SOCKET=/run/docker/plugins/i2p.sock
+ENV PLUGIN_SOCKET=/run/docker/plugins/i2p-network.sock
 
 # Expose plugin socket volume
 VOLUME ["/run/docker/plugins"]
@@ -66,4 +66,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 # Default command to run the plugin
 ENTRYPOINT ["/usr/local/bin/i2p-network-plugin"]
-CMD ["-sock", "/run/docker/plugins/i2p.sock"]
+CMD ["-sock", "/run/docker/plugins/i2p-network.sock"]

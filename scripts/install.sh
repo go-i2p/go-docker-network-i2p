@@ -11,7 +11,7 @@ INSTALL_DIR="/usr/local/bin"
 PLUGIN_DIR="/run/docker/plugins"
 SYSTEMD_DIR="/etc/systemd/system"
 DATA_DIR="/var/lib/i2p-network-plugin"
-PLUGIN_SOCKET="${PLUGIN_DIR}/i2p.sock"
+PLUGIN_SOCKET="${PLUGIN_DIR}/i2p-network.sock"
 
 # Colors for output
 RED='\033[0;31m'

@@ -99,7 +99,7 @@ Boolean environment variables accept multiple formats:
 
 ```bash
 # Basic plugin configuration
-export PLUGIN_SOCKET_PATH="/var/run/docker/plugins/i2p.sock"
+export PLUGIN_SOCKET_PATH="/var/run/docker/plugins/i2p-network.sock"
 export DEBUG="true"
 export NETWORK_NAME="my-i2p"
 
@@ -435,7 +435,7 @@ export I2P_SAM_HOST="localhost"
 export DEBUG="false"
 
 # Start plugin
-./i2p-network-plugin -sock /tmp/i2p.sock
+./i2p-network-plugin -sock /tmp/i2p-network.sock
 ```
 
 ### Development Setup

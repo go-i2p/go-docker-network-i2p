@@ -59,7 +59,7 @@ Error response from daemon: network plugin "i2p" not found
 2. **Start the plugin manually:**
    ```bash
    # Start with debug logging
-   sudo ./bin/i2p-network-plugin -sock /run/docker/plugins/i2p.sock -debug
+   sudo ./bin/i2p-network-plugin -sock /run/docker/plugins/i2p-network.sock -debug
    ```
 
 3. **Install as systemd service:**
@@ -73,7 +73,7 @@ Error response from daemon: network plugin "i2p" not found
    
    [Service]
    Type=simple
-   ExecStart=/usr/local/bin/i2p-network-plugin -sock /run/docker/plugins/i2p.sock
+   ExecStart=/usr/local/bin/i2p-network-plugin -sock /run/docker/plugins/i2p-network.sock
    Restart=always
    User=root
    Group=root
