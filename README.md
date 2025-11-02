@@ -6,11 +6,13 @@ A Docker network plugin that provides transparent I2P connectivity for container
 ## Features
 
 ✅ **Complete I2P Integration**: Transparent I2P connectivity for Docker containers  
-✅ **Automatic Service Exposure**: Generate .b32.i2p addresses for container services  
+✅ **Automatic Service Exposure**: Generate .b32.i2p addresses for container services (via `--expose`)  
 ✅ **Traffic Filtering**: Block non-I2P traffic with allowlist/blocklist support  
 ✅ **Container Isolation**: Separate I2P identity per container for security  
-✅ **Docker Plugin API v2**: Full compliance with Docker's Container Network Model  
-✅ **Production Ready**: Comprehensive testing and configuration options  
+✅ **Docker Plugin API v2**: Full CNM compliance (uses .b32.i2p addresses instead of host port mappings)  
+🔄 **Beta - Near Production Ready**: Comprehensive testing and configuration options
+
+**Note**: I2P networks don't support `-p` port mappings (e.g., `-p 8080:80`) since services are exposed via .b32.i2p addresses, not host ports. Use `--expose` to expose container ports to the I2P network.  
 
 ## Quick Start
 
@@ -18,7 +20,9 @@ A Docker network plugin that provides transparent I2P connectivity for container
 
 1. **I2P Router** with SAM bridge enabled on localhost:7656
 2. **Docker Engine** 20.10+ with plugin support
-3. **Linux system** with iptables support
+3. **Linux system** with **iptables** (required for traffic filtering and interception)
+
+⚠️ **Security Note**: iptables is mandatory for traffic filtering. Without it, non-I2P traffic may leak to clearnet, compromising anonymity. Network creation will fail if iptables is unavailable.
 
 ### Installation
 
@@ -32,8 +36,8 @@ make build
 sudo cp bin/i2p-network-plugin /usr/local/bin/
 sudo mkdir -p /run/docker/plugins
 
-# Start plugin daemon
-sudo i2p-network-plugin -sock /run/docker/plugins/i2p.sock
+# Start plugin daemon (uses default socket path)
+sudo i2p-network-plugin
 ```
 
 ### Basic Usage
@@ -48,8 +52,11 @@ docker run -d --name anonymous-web \
   --expose 80 \
   nginx:alpine
 
-# Service will be available via generated .b32.i2p address
-docker logs anonymous-web | grep "\.b32\.i2p"
+# Get service .b32.i2p address from plugin logs
+docker logs i2p-network-plugin 2>&1 | grep "exposed as"
+
+# Or inspect network settings (addresses in network options)
+docker inspect anonymous-web | grep -A 10 "com.i2p.service.addresses"
 ```
 
 ## Documentation
@@ -220,7 +227,7 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 - ✅ **Service Exposure**: Automatic I2P server tunnel creation
 - ✅ **Traffic Proxying**: Transparent SOCKS and DNS proxying
 - ✅ **Traffic Filtering**: Allowlist/blocklist with wildcard support
-- ✅ **Testing Infrastructure**: Comprehensive test suite with >60% coverage
+- ✅ **Testing Infrastructure**: Comprehensive test suite (average >60% coverage)
 
 See [PLAN.md](PLAN.md) for detailed development roadmap.
 

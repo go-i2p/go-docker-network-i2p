@@ -77,6 +77,9 @@ type I2PEndpoint struct {
 
 	// ServerTunnels are I2P server tunnels for inbound connections
 	ServerTunnels map[string]*i2p.Tunnel
+
+	// ServiceExposures contains I2P addresses for exposed services
+	ServiceExposures []*service.ServiceExposure
 }
 
 // NetworkManager manages I2P networks and their lifecycle.
@@ -441,6 +444,9 @@ func (nm *NetworkManager) JoinEndpoint(networkID, endpointID, containerID, sandb
 				log.Printf("Warning: Failed to expose services for container %s: %v", containerID, err)
 			} else {
 				log.Printf("Successfully exposed %d services for container %s", len(exposures), containerID)
+
+				// Store exposures in endpoint for retrieval via Join response
+				endpoint.ServiceExposures = exposures
 
 				// Log the service addresses for user visibility
 				for _, exposure := range exposures {

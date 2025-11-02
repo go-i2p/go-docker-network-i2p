@@ -220,6 +220,24 @@ func (p *Plugin) handleJoin(w http.ResponseWriter, r *http.Request) {
 		ErrorResponse: ErrorResponse{Err: ""},
 	}
 
+	// Add I2P service addresses to response options for user retrieval
+	if len(endpoint.ServiceExposures) > 0 {
+		if response.Options == nil {
+			response.Options = make(map[string]interface{})
+		}
+
+		// Create a map of port -> .b32.i2p address
+		serviceAddresses := make(map[string]string)
+		for _, exposure := range endpoint.ServiceExposures {
+			// Use service name and port as key
+			portKey := exposure.TunnelName
+			serviceAddresses[portKey] = exposure.Destination
+		}
+		response.Options["com.i2p.service.addresses"] = serviceAddresses
+
+		log.Printf("Exposed %d I2P service addresses for container via Join response", len(serviceAddresses))
+	}
+
 	log.Printf("Successfully joined endpoint %s to network %s with IP %s",
 		req.EndpointID, req.NetworkID, endpoint.IPAddress.String())
 	p.writeJSONResponse(w, response)
@@ -302,7 +320,13 @@ func (p *Plugin) handleProgramExternalConnectivity(w http.ResponseWriter, r *htt
 
 	log.Printf("Programming external connectivity for endpoint %s on network %s", req.EndpointID, req.NetworkID)
 
-	// TODO: Set up I2P server tunnels for exposed ports
+	// I2P networks use .b32.i2p addresses instead of host port mappings.
+	// Service exposure is handled automatically during Join for containers with --expose.
+	// Explicit port mappings via -p flag are not applicable to I2P networks.
+	log.Printf("Note: I2P networks expose services via .b32.i2p addresses, not host port mappings")
+
+	// Return success - Docker calls this for port mapping setup, but I2P handles
+	// service exposure differently (via automatic .b32.i2p generation in Join)
 	p.writeJSONResponse(w, ErrorResponse{Err: ""})
 }
 
@@ -321,7 +345,11 @@ func (p *Plugin) handleRevokeExternalConnectivity(w http.ResponseWriter, r *http
 
 	log.Printf("Revoking external connectivity for endpoint %s on network %s", req.EndpointID, req.NetworkID)
 
-	// TODO: Clean up I2P server tunnels
+	// I2P server tunnel cleanup is handled in LeaveEndpoint and DeleteEndpoint.
+	// This handler acknowledges Docker's cleanup request but actual tunnel teardown
+	// happens during endpoint/network lifecycle management.
+	log.Printf("Note: I2P tunnel cleanup handled via endpoint lifecycle management")
+
 	p.writeJSONResponse(w, ErrorResponse{Err: ""})
 }
 
