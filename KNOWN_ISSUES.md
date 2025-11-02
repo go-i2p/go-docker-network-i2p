@@ -2,6 +2,89 @@
 
 This document tracks known limitations and issues in the go-docker-network-i2p implementation.
 
+## Current Implementation Status
+
+### Project Maturity
+
+- **Core functionality**: Production ready
+- **Security controls**: Needs iptables enforcement fix before production use
+- **Testing**: Comprehensive test suite with ~64% average coverage
+  - I2P integration: 82%
+  - Service exposure: 91%
+  - Plugin framework: 60%
+  - Proxy components: 49%
+  - Configuration: 100%
+
+## Critical Issues
+
+### Issue #1: iptables Requirement Not Enforced at Network Creation
+
+**Status:** 🔴 Critical - Must fix before production deployment  
+**Impact:** Security vulnerability - users may create networks without traffic filtering
+
+**Description:**  
+Network creation succeeds even when iptables is not available, contradicting the security documentation that states "Network creation will fail if iptables is unavailable." The iptables check only occurs when the first container joins the network, which can lead to silent security failures.
+
+**Root Cause:**  
+The `CreateNetwork()` function in `pkg/plugin/network.go` doesn't check iptables availability before creating network state. The check only happens during `proxyMgr.Start()` when the first endpoint joins.
+
+**Reproduction:**
+```bash
+# On a system without iptables
+docker network create --driver=i2p test-network
+# Expected: Immediate failure with iptables error
+# Actual: Network creates successfully, fails later when container joins
+```
+
+**Recommended Fix:**
+
+```go
+func (nm *NetworkManager) CreateNetwork(...) error {
+    // Check iptables early, before creating any network state
+    if !nm.proxyMgr.IsRunning() {
+        interceptor := proxy.NewTrafficInterceptor(nm.defaultSubnet, 1080, 53)
+        if err := interceptor.IsAvailable(); err != nil {
+            return fmt.Errorf("iptables not available (required for traffic filtering): %w", err)
+        }
+    }
+    // ... rest of network creation ...
+}
+```
+
+**Files to modify:**
+
+- `pkg/plugin/network.go:100-117`
+- `pkg/proxy/manager.go:64-68`
+
+---
+
+### Issue #2: Service .b32.i2p Addresses Not Retrievable Via docker logs
+
+**Status:** 🔴 Critical - Documentation error causing usability issues  
+**Impact:** Users cannot retrieve service addresses using documented method
+
+**Description:**  
+The README instructs users to run `docker logs i2p-network-plugin` to view service addresses, but this fails because the plugin runs as a system daemon, not a Docker container. The command `docker logs i2p-network-plugin` returns "No such container: i2p-network-plugin".
+
+**Root Cause:**  
+Documentation assumes containerized deployment but the standard installation method (described in README) runs the plugin as a system binary via `sudo i2p-network-plugin`.
+
+**Reproduction:**
+
+```bash
+# Follow README installation
+sudo i2p-network-plugin
+# In another terminal:
+docker logs i2p-network-plugin 2>&1 | grep "exposed as"
+# Expected: Shows .b32.i2p addresses
+# Actual: Error: No such container: i2p-network-plugin
+```
+
+**Recommended Fix:**  
+Update README.md log retrieval section (already applied in this consolidation).
+
+---
+
 ## I2P SAM Library Limitations
 
 ### Multiple Server Tunnels per Container (RESOLVED)

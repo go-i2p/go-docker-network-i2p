@@ -660,8 +660,7 @@ docker run -d --name anon-files \
 
 - See [CONFIG.md](CONFIG.md) for detailed configuration reference
 - See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for issue resolution
-- Check [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for current limitations
-- Review [PLAN.md](PLAN.md) for upcoming features
+- Check [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for current limitations and roadmap
 
 ## Support
 

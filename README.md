@@ -53,12 +53,10 @@ docker run -d --name anonymous-web \
   nginx:alpine
 
 # Get service .b32.i2p address from plugin logs
-# If running as system daemon (default installation):
+# If running plugin as system daemon (default installation):
 sudo journalctl -u i2p-network-plugin | grep "exposed as"
-# Or check recent plugin output:
-journalctl -xe | grep "i2p-network-plugin" | grep "exposed as"
 
-# If running as Docker container (via make docker-run):
+# If running plugin as Docker container (via make docker-run):
 docker logs i2p-network-plugin 2>&1 | grep "exposed as"
 
 # Or inspect container network settings (always available):
@@ -71,6 +69,7 @@ docker inspect anonymous-web | grep -A 10 "com.i2p.service.addresses"
 ⚙️ **[CONFIG.md](CONFIG.md)** - Complete configuration reference  
 🔧 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Diagnostic and troubleshooting guide  
 ⚠️ **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** - Current limitations and known issues  
+📦 **[DISTRIBUTION.md](DISTRIBUTION.md)** - Distribution and packaging guide  
 
 ## Architecture
 
@@ -239,7 +238,7 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 We welcome contributions! Please see:
 
 - **Issues**: [GitHub Issues](https://github.com/go-i2p/go-docker-network-i2p/issues)
-- **Development**: Check GitHub Issues and Milestones for current development status
+- **Development**: Check GitHub Issues, Milestones, and [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for current development status
 - **Testing**: Run `make test` to verify changes
 - **Documentation**: Update relevant `.md` files for new features
 
