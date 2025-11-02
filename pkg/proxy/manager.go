@@ -186,6 +186,24 @@ func (pm *ProxyManager) GetTrafficFilter() *TrafficFilter {
 	return pm.trafficFilter
 }
 
+// UpdateFilterConfig updates the traffic filter configuration.
+//
+// This allows changing filter modes (allowlist/blocklist enable/disable) at runtime.
+// Existing allowlist/blocklist entries are preserved.
+func (pm *ProxyManager) UpdateFilterConfig(config *FilterConfig) {
+	if pm.trafficFilter != nil {
+		pm.trafficFilter.UpdateConfig(config)
+	}
+}
+
+// GetFilterConfig returns the current filter configuration.
+func (pm *ProxyManager) GetFilterConfig() FilterConfig {
+	if pm.trafficFilter != nil {
+		return pm.trafficFilter.GetConfig()
+	}
+	return *DefaultFilterConfig()
+}
+
 // AddToAllowlist adds a destination to the traffic filter allowlist.
 func (pm *ProxyManager) AddToAllowlist(destination string) error {
 	return pm.trafficFilter.AddToAllowlist(destination)

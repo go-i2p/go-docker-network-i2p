@@ -107,6 +107,34 @@ func NewTrafficFilter(config *FilterConfig) *TrafficFilter {
 	}
 }
 
+// UpdateConfig updates the filter configuration.
+//
+// This allows changing filter modes (allowlist/blocklist enable/disable) at runtime.
+// Note: Existing allowlist/blocklist entries are preserved.
+func (tf *TrafficFilter) UpdateConfig(config *FilterConfig) {
+	if config == nil {
+		return
+	}
+
+	tf.mutex.Lock()
+	defer tf.mutex.Unlock()
+
+	tf.config = config
+
+	if tf.config.LogTraffic {
+		log.Printf("Updated traffic filter configuration: allowlist=%v, blocklist=%v",
+			config.EnableAllowlist, config.EnableBlocklist)
+	}
+}
+
+// GetConfig returns a copy of the current filter configuration.
+func (tf *TrafficFilter) GetConfig() FilterConfig {
+	tf.mutex.RLock()
+	defer tf.mutex.RUnlock()
+
+	return *tf.config
+}
+
 // AddToAllowlist adds a destination to the allowlist.
 //
 // Destinations can be exact matches (example.i2p) or patterns (*.example.i2p).

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
@@ -185,6 +186,10 @@ func (nm *NetworkManager) CreateNetwork(networkID string, options map[string]int
 	// Parse network-level exposure configuration
 	exposureConfig := parseNetworkExposureConfig(options)
 
+	// Parse traffic filter configuration
+	filterConfig := parseFilterConfig(options)
+	allowlist, blocklist := parseFilterDestinations(options)
+
 	// Create the network
 	network := &I2PNetwork{
 		ID:             networkID,
@@ -209,6 +214,26 @@ func (nm *NetworkManager) CreateNetwork(networkID string, options map[string]int
 			return fmt.Errorf("failed to start proxy manager: %w", err)
 		}
 		log.Printf("Started proxy manager for transparent I2P proxying")
+	}
+
+	// Apply filter configuration (whether proxy manager is new or already running)
+	nm.proxyMgr.UpdateFilterConfig(filterConfig)
+
+	// Add allowlist/blocklist entries
+	for _, dest := range allowlist {
+		if err := nm.proxyMgr.AddToAllowlist(dest); err != nil {
+			log.Printf("Warning: Failed to add '%s' to allowlist: %v", dest, err)
+		} else {
+			log.Printf("Added '%s' to traffic filter allowlist", dest)
+		}
+	}
+
+	for _, dest := range blocklist {
+		if err := nm.proxyMgr.AddToBlocklist(dest); err != nil {
+			log.Printf("Warning: Failed to add '%s' to blocklist: %v", dest, err)
+		} else {
+			log.Printf("Added '%s' to traffic filter blocklist", dest)
+		}
 	}
 
 	log.Printf("Successfully created I2P network %s with subnet %s", networkID, subnet)
@@ -769,6 +794,105 @@ func parseNetworkExposureConfig(options map[string]interface{}) service.NetworkE
 	}
 
 	return config
+}
+
+// parseFilterConfig extracts traffic filter configuration from network options.
+//
+// This function parses Docker network creation options to configure traffic filtering:
+// - i2p.filter.mode: "allowlist", "blocklist", or "disabled" (default: "blocklist")
+// - i2p.filter.allowlist: comma-separated list of allowed I2P destinations
+// - i2p.filter.blocklist: comma-separated list of blocked I2P destinations
+//
+// The filter configuration is applied when the network is created. If the proxy
+// manager is already running from a previous network, the filter config is updated.
+func parseFilterConfig(options map[string]interface{}) *proxy.FilterConfig {
+	config := proxy.DefaultFilterConfig()
+
+	if options == nil {
+		return config
+	}
+
+	// Parse filter mode
+	if mode, ok := options["i2p.filter.mode"]; ok {
+		if modeStr, ok := mode.(string); ok {
+			switch strings.ToLower(modeStr) {
+			case "allowlist":
+				config.EnableAllowlist = true
+				config.EnableBlocklist = false
+				log.Printf("Network filter mode set to allowlist")
+			case "blocklist":
+				config.EnableAllowlist = false
+				config.EnableBlocklist = true
+				log.Printf("Network filter mode set to blocklist")
+			case "disabled":
+				config.EnableAllowlist = false
+				config.EnableBlocklist = false
+				log.Printf("Network filter mode disabled")
+			default:
+				log.Printf("Warning: Unknown filter mode '%s', using default blocklist mode", modeStr)
+			}
+		}
+	}
+
+	return config
+}
+
+// parseFilterDestinations extracts destination lists from network options.
+//
+// Returns two slices: allowlist destinations and blocklist destinations.
+// Destinations can be comma-separated or provided as string slices.
+func parseFilterDestinations(options map[string]interface{}) ([]string, []string) {
+	var allowlist, blocklist []string
+
+	if options == nil {
+		return allowlist, blocklist
+	}
+
+	// Parse allowlist
+	if allowlistOpt, ok := options["i2p.filter.allowlist"]; ok {
+		switch v := allowlistOpt.(type) {
+		case string:
+			// Split comma-separated list
+			for _, dest := range strings.Split(v, ",") {
+				dest = strings.TrimSpace(dest)
+				if dest != "" {
+					allowlist = append(allowlist, dest)
+				}
+			}
+		case []string:
+			allowlist = v
+		case []interface{}:
+			for _, item := range v {
+				if str, ok := item.(string); ok {
+					allowlist = append(allowlist, strings.TrimSpace(str))
+				}
+			}
+		}
+	}
+
+	// Parse blocklist
+	if blocklistOpt, ok := options["i2p.filter.blocklist"]; ok {
+		switch v := blocklistOpt.(type) {
+		case string:
+			// Split comma-separated list
+			for _, dest := range strings.Split(v, ",") {
+				dest = strings.TrimSpace(dest)
+				if dest != "" {
+					blocklist = append(blocklist, dest)
+				}
+			}
+		case []string:
+			blocklist = v
+		case []interface{}:
+			for _, item := range v {
+				if str, ok := item.(string); ok {
+					blocklist = append(blocklist, strings.TrimSpace(str))
+				}
+			}
+		}
+	}
+
+	return allowlist, blocklist
 }
 
 // Shutdown gracefully shuts down the NetworkManager and all associated resources.
