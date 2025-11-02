@@ -20,6 +20,8 @@ type ProxyManager struct {
 	socksProxy *SOCKSProxy
 	// dnsResolver provides DNS resolution for I2P domains
 	dnsResolver *I2PDNSResolver
+	// trafficFilter provides traffic filtering and monitoring
+	trafficFilter *TrafficFilter
 	// tunnelManager manages I2P tunnels
 	tunnelManager *i2p.TunnelManager
 	// config holds proxy configuration
@@ -64,14 +66,19 @@ func DefaultProxyConfig(subnet *net.IPNet) *ProxyConfig {
 func NewProxyManager(config *ProxyConfig, tunnelManager *i2p.TunnelManager) *ProxyManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Create shared traffic filter for all components
+	trafficFilter := NewTrafficFilter(DefaultFilterConfig())
+
 	interceptor := NewTrafficInterceptor(config.ContainerSubnet, config.SOCKSPort, config.DNSPort)
 	socksProxy := NewSOCKSProxy(config.SOCKSBindAddr, tunnelManager)
+	socksProxy.SetTrafficFilter(trafficFilter)
 	dnsResolver := NewI2PDNSResolver(config.DNSBindAddr)
 
 	return &ProxyManager{
 		interceptor:   interceptor,
 		socksProxy:    socksProxy,
 		dnsResolver:   dnsResolver,
+		trafficFilter: trafficFilter,
 		tunnelManager: tunnelManager,
 		config:        config,
 		ctx:           ctx,
@@ -163,4 +170,60 @@ func (pm *ProxyManager) IsRunning() bool {
 // GetConfig returns the current proxy configuration.
 func (pm *ProxyManager) GetConfig() *ProxyConfig {
 	return pm.config
+}
+
+// GetTrafficFilter returns the traffic filter for configuration and monitoring.
+func (pm *ProxyManager) GetTrafficFilter() *TrafficFilter {
+	return pm.trafficFilter
+}
+
+// AddToAllowlist adds a destination to the traffic filter allowlist.
+func (pm *ProxyManager) AddToAllowlist(destination string) error {
+	return pm.trafficFilter.AddToAllowlist(destination)
+}
+
+// AddToBlocklist adds a destination to the traffic filter blocklist.
+func (pm *ProxyManager) AddToBlocklist(destination string) error {
+	return pm.trafficFilter.AddToBlocklist(destination)
+}
+
+// RemoveFromAllowlist removes a destination from the allowlist.
+func (pm *ProxyManager) RemoveFromAllowlist(destination string) {
+	pm.trafficFilter.RemoveFromAllowlist(destination)
+}
+
+// RemoveFromBlocklist removes a destination from the blocklist.
+func (pm *ProxyManager) RemoveFromBlocklist(destination string) {
+	pm.trafficFilter.RemoveFromBlocklist(destination)
+}
+
+// GetTrafficStats returns current traffic statistics.
+func (pm *ProxyManager) GetTrafficStats() TrafficStats {
+	return pm.trafficFilter.GetStats()
+}
+
+// GetRecentTrafficLogs returns recent traffic log entries.
+func (pm *ProxyManager) GetRecentTrafficLogs(limit int) []TrafficLogEntry {
+	return pm.trafficFilter.GetRecentLogs(limit)
+}
+
+// ClearTrafficStats resets all traffic statistics and logs.
+func (pm *ProxyManager) ClearTrafficStats() {
+	pm.trafficFilter.ClearStats()
+}
+
+// GetAllowlist returns the current allowlist
+func (pm *ProxyManager) GetAllowlist() []string {
+	if pm.trafficFilter != nil {
+		return pm.trafficFilter.GetAllowlist()
+	}
+	return []string{}
+}
+
+// GetBlocklist returns the current blocklist
+func (pm *ProxyManager) GetBlocklist() []string {
+	if pm.trafficFilter != nil {
+		return pm.trafficFilter.GetBlocklist()
+	}
+	return []string{}
 }

@@ -21,6 +21,8 @@ type SOCKSProxy struct {
 	listenAddr string
 	// tunnelManager manages I2P tunnels for proxy connections
 	tunnelManager *i2p.TunnelManager
+	// trafficFilter provides traffic filtering and monitoring
+	trafficFilter *TrafficFilter
 	// listener is the TCP listener for SOCKS connections
 	listener net.Listener
 	// ctx is the context for proxy operation
@@ -39,6 +41,7 @@ func NewSOCKSProxy(listenAddr string, tunnelManager *i2p.TunnelManager) *SOCKSPr
 	return &SOCKSProxy{
 		listenAddr:    listenAddr,
 		tunnelManager: tunnelManager,
+		trafficFilter: NewTrafficFilter(DefaultFilterConfig()),
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -115,8 +118,9 @@ func (s *SOCKSProxy) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Check if target is an I2P destination
-	if !s.isI2PDestination(target) {
+	// Check if connection should be allowed using traffic filter
+	allowed, _ := s.trafficFilter.ShouldAllowConnection(target, "tcp")
+	if !allowed {
 		s.sendSOCKS5Error(conn, 0x02) // Connection not allowed by ruleset
 		return
 	}
@@ -134,8 +138,14 @@ func (s *SOCKSProxy) handleConnection(conn net.Conn) {
 		return
 	}
 
+	// Get client address for logging
+	clientAddr := conn.RemoteAddr().String()
+
 	// Relay traffic between SOCKS client and I2P connection
-	s.relayTraffic(conn, i2pConn)
+	bytesTransferred := s.relayTraffic(conn, i2pConn)
+
+	// Log the completed connection
+	s.trafficFilter.LogConnection(clientAddr, target, "tcp", bytesTransferred)
 }
 
 // performSOCKS5Handshake handles the SOCKS5 authentication handshake.
@@ -310,21 +320,36 @@ func (s *SOCKSProxy) sendSOCKS5Success(conn net.Conn) error {
 }
 
 // relayTraffic copies data between the SOCKS client and I2P connection.
-func (s *SOCKSProxy) relayTraffic(client, i2p net.Conn) {
-	done := make(chan struct{}, 2)
+// Returns the total number of bytes transferred in both directions.
+func (s *SOCKSProxy) relayTraffic(client, i2p net.Conn) int64 {
+	done := make(chan int64, 2)
 
 	// Copy from client to I2P
 	go func() {
-		defer func() { done <- struct{}{} }()
-		io.Copy(i2p, client)
+		bytes, _ := io.Copy(i2p, client)
+		done <- bytes
 	}()
 
 	// Copy from I2P to client
 	go func() {
-		defer func() { done <- struct{}{} }()
-		io.Copy(client, i2p)
+		bytes, _ := io.Copy(client, i2p)
+		done <- bytes
 	}()
 
-	// Wait for one direction to complete
-	<-done
+	// Wait for both directions to complete and sum bytes
+	bytes1 := <-done
+	bytes2 := <-done
+	return bytes1 + bytes2
+}
+
+// GetTrafficFilter returns the traffic filter used by this proxy.
+func (s *SOCKSProxy) GetTrafficFilter() *TrafficFilter {
+	return s.trafficFilter
+}
+
+// SetTrafficFilter sets a custom traffic filter for this proxy.
+func (s *SOCKSProxy) SetTrafficFilter(filter *TrafficFilter) {
+	if filter != nil {
+		s.trafficFilter = filter
+	}
 }

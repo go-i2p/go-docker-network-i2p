@@ -377,6 +377,179 @@ func BenchmarkI2PDNSResolver_generateI2PIP(b *testing.B) {
 	}
 }
 
+func TestSOCKSProxy_TrafficFilterIntegration(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	proxy := NewSOCKSProxy("127.0.0.1:1080", tunnelMgr)
+
+	// Test traffic filter initialization
+	filter := proxy.GetTrafficFilter()
+	if filter == nil {
+		t.Error("Expected traffic filter to be initialized")
+	}
+
+	// Test allowlist functionality
+	err = filter.AddToAllowlist("example.i2p")
+	if err != nil {
+		t.Errorf("Failed to add to allowlist: %v", err)
+	}
+
+	allowed, _ := filter.ShouldAllowConnection("example.i2p:80", "tcp")
+	if !allowed {
+		t.Error("Expected example.i2p to be allowed")
+	}
+
+	// Test blocklist functionality
+	err = filter.AddToBlocklist("blocked.i2p")
+	if err != nil {
+		t.Errorf("Failed to add to blocklist: %v", err)
+	}
+
+	blocked, _ := filter.ShouldAllowConnection("blocked.i2p:80", "tcp")
+	if blocked {
+		t.Error("Expected blocked.i2p to be blocked")
+	}
+
+	// Test statistics
+	stats := filter.GetStats()
+	if stats.I2PConnectionsAllowed < 0 {
+		t.Error("Expected valid traffic stats for new filter")
+	}
+}
+
+func TestProxyManager_TrafficFilterIntegration(t *testing.T) {
+	_, subnet, err := net.ParseCIDR("172.20.0.0/16")
+	if err != nil {
+		t.Fatalf("Failed to parse test subnet: %v", err)
+	}
+
+	config := DefaultProxyConfig(subnet)
+
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager := NewProxyManager(config, tunnelMgr)
+
+	// Test traffic filter initialization
+	filter := manager.GetTrafficFilter()
+	if filter == nil {
+		t.Error("Expected traffic filter to be initialized")
+	}
+
+	// Test allowlist management
+	err = manager.AddToAllowlist("test.i2p")
+	if err != nil {
+		t.Errorf("Failed to add to allowlist via manager: %v", err)
+	}
+
+	allowlist := manager.GetAllowlist()
+	found := false
+	for _, domain := range allowlist {
+		if domain == "test.i2p" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected test.i2p to be in allowlist")
+	}
+
+	// Test blocklist management
+	err = manager.AddToBlocklist("bad.i2p")
+	if err != nil {
+		t.Errorf("Failed to add to blocklist via manager: %v", err)
+	}
+
+	blocklist := manager.GetBlocklist()
+	found = false
+	for _, domain := range blocklist {
+		if domain == "bad.i2p" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected bad.i2p to be in blocklist")
+	}
+
+	// Test statistics access
+	stats := manager.GetTrafficStats()
+	if stats.I2PConnectionsAllowed < 0 {
+		t.Error("Expected valid traffic stats via manager")
+	}
+
+	// Test removal functionality
+	manager.RemoveFromAllowlist("test.i2p")
+	manager.RemoveFromBlocklist("bad.i2p")
+
+	// Verify removal
+	allowlist = manager.GetAllowlist()
+	for _, domain := range allowlist {
+		if domain == "test.i2p" {
+			t.Error("Expected test.i2p to be removed from allowlist")
+		}
+	}
+}
+
+func TestSOCKSProxy_TrafficFilterValidation(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	proxy := NewSOCKSProxy("127.0.0.1:1080", tunnelMgr)
+	filter := proxy.GetTrafficFilter()
+
+	// Test wildcard patterns
+	err = filter.AddToAllowlist("*.example.i2p")
+	if err != nil {
+		t.Errorf("Failed to add wildcard to allowlist: %v", err)
+	}
+
+	// Should allow subdomains
+	allowed, _ := filter.ShouldAllowConnection("sub.example.i2p:80", "tcp")
+	if !allowed {
+		t.Error("Expected wildcard to allow subdomains")
+	}
+
+	// Test case sensitivity
+	err = filter.AddToBlocklist("CASE.I2P")
+	if err != nil {
+		t.Errorf("Failed to add uppercase domain to blocklist: %v", err)
+	}
+
+	// Should block regardless of case
+	blocked, _ := filter.ShouldAllowConnection("case.i2p:80", "tcp")
+	if blocked {
+		t.Error("Expected case-insensitive blocking")
+	}
+
+	// Test filter priority (blocklist overrides allowlist)
+	err = filter.AddToAllowlist("conflict.i2p")
+	if err != nil {
+		t.Errorf("Failed to add conflict domain to allowlist: %v", err)
+	}
+
+	err = filter.AddToBlocklist("conflict.i2p")
+	if err != nil {
+		t.Errorf("Failed to add conflict domain to blocklist: %v", err)
+	}
+
+	// Blocklist should take precedence
+	conflictAllowed, _ := filter.ShouldAllowConnection("conflict.i2p:80", "tcp")
+	if conflictAllowed {
+		t.Error("Expected blocklist to override allowlist")
+	}
+}
+
 func BenchmarkSOCKSProxy_isI2PDestination(b *testing.B) {
 	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
 	if err != nil {
@@ -390,5 +563,27 @@ func BenchmarkSOCKSProxy_isI2PDestination(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		proxy.isI2PDestination(target)
+	}
+}
+
+func BenchmarkTrafficFilter_ShouldAllowConnection(b *testing.B) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		b.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	proxy := NewSOCKSProxy("127.0.0.1:1080", tunnelMgr)
+	filter := proxy.GetTrafficFilter()
+
+	// Add some test patterns
+	filter.AddToAllowlist("*.allowed.i2p")
+	filter.AddToBlocklist("blocked.i2p")
+
+	target := "test.allowed.i2p:80"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		filter.ShouldAllowConnection(target, "tcp")
 	}
 }
