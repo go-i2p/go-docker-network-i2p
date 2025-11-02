@@ -163,8 +163,10 @@ func (nm *NetworkManager) CreateNetwork(networkID string, options map[string]int
 	log.Printf("Creating I2P network %s", networkID)
 
 	// Check iptables availability before creating network state (required for traffic filtering)
-	// This enforces the security requirement that networks cannot be created without iptables
-	if len(nm.networks) == 0 && !nm.proxyMgr.IsRunning() {
+	// This enforces the security requirement that networks cannot be created without iptables.
+	// We check whenever the proxy manager is not yet running, as it will need to be started
+	// for any network to function properly with traffic filtering capabilities.
+	if !nm.proxyMgr.IsRunning() {
 		if err := nm.proxyMgr.CheckIptablesAvailability(); err != nil {
 			return fmt.Errorf("iptables not available (required for traffic filtering): %w", err)
 		}
