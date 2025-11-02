@@ -140,11 +140,12 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 
 	// 2. Check for exposed ports in container options (medium priority)
 	if exposedPorts := sem.extractPortsFromOptions(options); len(exposedPorts) > 0 {
-		// Only add ports not already configured via labels with same exposure type
+		// Only add ports not already configured via labels (any exposure type)
+		// This enforces label priority: if a port is labeled, ignore EXPOSE directives
 		for _, port := range exposedPorts {
 			// Default to I2P exposure for auto-detected ports (backward compatibility)
 			port.ExposureType = ExposureTypeI2P
-			if !sem.isPortConfigured(port.ContainerPort, port.ExposureType, ports) {
+			if !sem.isPortConfiguredAny(port.ContainerPort, ports) {
 				ports = append(ports, port)
 			}
 		}
@@ -155,7 +156,7 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 		for _, port := range envPorts {
 			// Default to I2P exposure for auto-detected ports (backward compatibility)
 			port.ExposureType = ExposureTypeI2P
-			if !sem.isPortConfigured(port.ContainerPort, port.ExposureType, ports) {
+			if !sem.isPortConfiguredAny(port.ContainerPort, ports) {
 				ports = append(ports, port)
 			}
 		}
@@ -444,18 +445,58 @@ func (sem *ServiceExposureManager) isPortConfigured(port int, exposureType Expos
 	return false
 }
 
+// isPortConfiguredAny checks if a port is configured with any exposure type.
+//
+// This is used to enforce label priority - if a port is configured via label
+// (regardless of exposure type), lower-priority sources should not add it again.
+func (sem *ServiceExposureManager) isPortConfiguredAny(port int, configuredPorts []ExposedPort) bool {
+	for _, p := range configuredPorts {
+		if p.ContainerPort == port {
+			return true
+		}
+	}
+	return false
+}
+
 // createIPServiceExposure creates an IP-based service exposure.
 //
-// IP-based port forwarding is not yet implemented. This method returns an error
-// to prevent users from creating non-functional configurations that appear to work
-// but silently fail to expose services.
+// This creates a direct IP:port exposure without I2P tunneling. The service
+// is made available on the specified target IP (defaults to 127.0.0.1).
+// This is useful for local development or when I2P anonymity is not required.
 //
-// Use I2P exposure (ExposureTypeI2P) instead, which is fully functional and
-// exposes services via .b32.i2p addresses accessible through the I2P network.
+// Unlike I2P exposure which creates .b32.i2p addresses, IP exposure provides
+// standard IP:port access to the container service.
 func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
-	// IP exposure is not yet implemented - return clear error to prevent confusion
-	return nil, fmt.Errorf("IP-based port exposure (i2p.expose.%d=ip) is not yet implemented. Use I2P exposure instead by omitting the 'ip:' prefix or using 'i2p' explicitly (e.g., i2p.expose.%d=i2p). Services will be exposed via .b32.i2p addresses",
-		port.ContainerPort, port.ContainerPort)
+	// Validate and set default target IP
+	targetIP := port.TargetIP
+	if targetIP == "" {
+		targetIP = "127.0.0.1"
+	}
+
+	// Validate the target IP address
+	parsedIP := net.ParseIP(targetIP)
+	if parsedIP == nil {
+		return nil, fmt.Errorf("invalid target IP address: %s", targetIP)
+	}
+
+	// Generate unique exposure name
+	exposureName := fmt.Sprintf("ip-%s-%s-%d", containerID, port.ServiceName, port.ContainerPort)
+
+	// Format destination as IP:port
+	// Handle IPv6 addresses with brackets
+	destination := fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
+	if parsedIP.To4() == nil {
+		// IPv6 address - use bracket notation
+		destination = fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
+	}
+
+	return &ServiceExposure{
+		ContainerID: containerID,
+		Port:        port,
+		Tunnel:      nil, // No I2P tunnel for IP exposure
+		Destination: destination,
+		TunnelName:  exposureName,
+	}, nil
 }
 
 // createI2PServiceExposure creates an I2P-based service exposure.

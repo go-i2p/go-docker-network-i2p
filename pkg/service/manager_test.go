@@ -1219,42 +1219,54 @@ func TestIsPortConfigured(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		port     int
-		expected bool
+		name         string
+		port         int
+		exposureType ExposureType
+		expected     bool
 	}{
 		{
-			name:     "port is configured",
-			port:     80,
-			expected: true,
+			name:         "port is configured for I2P",
+			port:         80,
+			exposureType: ExposureTypeI2P,
+			expected:     true,
 		},
 		{
-			name:     "port is not configured",
-			port:     9090,
-			expected: false,
+			name:         "port is not configured",
+			port:         9090,
+			exposureType: ExposureTypeI2P,
+			expected:     false,
 		},
 		{
-			name:     "another configured port",
-			port:     443,
-			expected: true,
+			name:         "port configured for IP",
+			port:         443,
+			exposureType: ExposureTypeIP,
+			expected:     true,
 		},
 		{
-			name:     "yet another configured port",
-			port:     8080,
-			expected: true,
+			name:         "another I2P configured port",
+			port:         8080,
+			exposureType: ExposureTypeI2P,
+			expected:     true,
 		},
 		{
-			name:     "unconfigured port",
-			port:     3000,
-			expected: false,
+			name:         "unconfigured port",
+			port:         3000,
+			exposureType: ExposureTypeI2P,
+			expected:     false,
+		},
+		{
+			name:         "port configured for different type",
+			port:         443,
+			exposureType: ExposureTypeI2P,
+			expected:     false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := manager.isPortConfigured(tt.port, configuredPorts)
+			result := manager.isPortConfigured(tt.port, tt.exposureType, configuredPorts)
 			if result != tt.expected {
-				t.Errorf("Expected isPortConfigured(%d) to be %v, got %v", tt.port, tt.expected, result)
+				t.Errorf("Expected isPortConfigured(%d, %s) to be %v, got %v", tt.port, tt.exposureType, tt.expected, result)
 			}
 		})
 	}
