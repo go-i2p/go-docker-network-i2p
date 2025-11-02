@@ -158,8 +158,30 @@ func (p *Plugin) handleEndpointInfo(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Getting info for endpoint %s on network %s", req.EndpointID, req.NetworkID)
 
+	// Get endpoint to retrieve service exposures
+	network := p.networkMgr.GetNetwork(req.NetworkID)
+	value := make(map[string]interface{})
+
+	if network != nil {
+		network.mutex.RLock()
+		endpoint, exists := network.Endpoints[req.EndpointID]
+		network.mutex.RUnlock()
+
+		if exists && endpoint != nil && len(endpoint.ServiceExposures) > 0 {
+			// Add service addresses to endpoint info (accessible via docker inspect)
+			serviceAddresses := make(map[string]string)
+			for _, exposure := range endpoint.ServiceExposures {
+				portKey := exposure.TunnelName
+				serviceAddresses[portKey] = exposure.Destination
+			}
+			value["com.i2p.service.addresses"] = serviceAddresses
+			log.Printf("Providing %d I2P service addresses for endpoint %s via EndpointOperInfo",
+				len(serviceAddresses), req.EndpointID)
+		}
+	}
+
 	response := EndpointInfoResponse{
-		Value:         map[string]interface{}{},
+		Value:         value,
 		ErrorResponse: ErrorResponse{Err: ""},
 	}
 
