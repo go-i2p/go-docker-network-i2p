@@ -167,6 +167,15 @@ func (pm *ProxyManager) IsRunning() bool {
 	}
 }
 
+// CheckIptablesAvailability verifies that iptables is available and usable.
+//
+// This method should be called before creating networks to enforce the security
+// requirement that iptables must be available for traffic filtering.
+// Returns an error if iptables is not available or cannot be used.
+func (pm *ProxyManager) CheckIptablesAvailability() error {
+	return pm.interceptor.IsAvailable()
+}
+
 // GetConfig returns the current proxy configuration.
 func (pm *ProxyManager) GetConfig() *ProxyConfig {
 	return pm.config
