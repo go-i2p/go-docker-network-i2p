@@ -7,6 +7,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -45,6 +46,15 @@ type PluginConfig struct {
 }
 
 // DefaultConfig returns a default configuration.
+//
+// This provides the lowest-priority configuration values, which can be
+// overridden by environment variables (via LoadFromEnvironment) or
+// command-line flags (applied in main.go after config initialization).
+//
+// Configuration loading order:
+//  1. Start with defaults (this function)
+//  2. Override with environment variables (LoadFromEnvironment)
+//  3. Override with command-line flags (main.go)
 func DefaultConfig() *Config {
 	return &Config{
 		Plugin: PluginConfig{
@@ -63,35 +73,64 @@ func DefaultConfig() *Config {
 //
 // This method updates the configuration with values from environment
 // variables, allowing for container-friendly configuration management.
+//
+// Configuration Precedence Order:
+//  1. Command-line flags (highest priority, applied in main.go)
+//  2. Environment variables (this method)
+//  3. Default values (lowest priority, from DefaultConfig)
+//
+// Example: If both PLUGIN_SOCKET_PATH and -sock flag are specified,
+// the -sock flag value will be used as it's applied after this method.
 func (c *Config) LoadFromEnvironment() error {
 	// Plugin configuration
 	if sockPath := os.Getenv("PLUGIN_SOCKET_PATH"); sockPath != "" {
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Applying PLUGIN_SOCKET_PATH from environment: %s", sockPath)
+		}
 		c.Plugin.SocketPath = sockPath
 	}
 
 	if debug := os.Getenv("DEBUG"); debug != "" {
 		c.Plugin.Debug = parseBool(debug, c.Plugin.Debug)
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Debug mode enabled via DEBUG environment variable")
+		}
 	}
 
 	if networkName := os.Getenv("NETWORK_NAME"); networkName != "" {
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Applying NETWORK_NAME from environment: %s", networkName)
+		}
 		c.Plugin.NetworkName = networkName
 	}
 
 	if subnet := os.Getenv("IPAM_SUBNET"); subnet != "" {
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Applying IPAM_SUBNET from environment: %s", subnet)
+		}
 		c.Plugin.IPAMSubnet = subnet
 	}
 
 	if gateway := os.Getenv("GATEWAY"); gateway != "" {
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Applying GATEWAY from environment: %s", gateway)
+		}
 		c.Plugin.Gateway = gateway
 	}
 
 	// I2P SAM configuration
 	if host := os.Getenv("I2P_SAM_HOST"); host != "" {
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Applying I2P_SAM_HOST from environment: %s", host)
+		}
 		c.SAM.Host = host
 	}
 
 	if portStr := os.Getenv("I2P_SAM_PORT"); portStr != "" {
 		if port, err := strconv.Atoi(portStr); err == nil && port > 0 && port <= 65535 {
+			if c.Plugin.Debug {
+				log.Printf("DEBUG: Applying I2P_SAM_PORT from environment: %d", port)
+			}
 			c.SAM.Port = port
 		}
 	}
@@ -154,6 +193,16 @@ func (c *Config) LoadFromEnvironment() error {
 
 // Validate validates the configuration for correctness.
 func (c *Config) Validate() error {
+	if c.Plugin.Debug {
+		log.Printf("DEBUG: Validating configuration...")
+		log.Printf("DEBUG: Socket path: %s", c.Plugin.SocketPath)
+		log.Printf("DEBUG: Network name: %s", c.Plugin.NetworkName)
+		log.Printf("DEBUG: IPAM subnet: %s", c.Plugin.IPAMSubnet)
+		log.Printf("DEBUG: Gateway: %s", c.Plugin.Gateway)
+		log.Printf("DEBUG: SAM host: %s", c.SAM.Host)
+		log.Printf("DEBUG: SAM port: %d", c.SAM.Port)
+	}
+
 	// Validate plugin configuration
 	if c.Plugin.SocketPath == "" {
 		return fmt.Errorf("plugin socket path cannot be empty")
@@ -203,6 +252,10 @@ func (c *Config) Validate() error {
 
 	if c.TunnelDefaults.CloseIdleTime <= 0 {
 		return fmt.Errorf("close idle time must be positive, got %d", c.TunnelDefaults.CloseIdleTime)
+	}
+
+	if c.Plugin.Debug {
+		log.Printf("DEBUG: Configuration validation successful")
 	}
 
 	return nil

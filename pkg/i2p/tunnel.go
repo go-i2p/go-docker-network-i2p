@@ -209,16 +209,42 @@ func (tm *TunnelManager) CreateTunnel(config *TunnelConfig) (*Tunnel, error) {
 	}
 	tunnel.session = session
 
+	// Track if this is the first tunnel for this container (before creation attempt)
+	// This is used for cleanup if tunnel creation fails
+	isFirstTunnel := tm.countContainerTunnels(config.ContainerID) == 0
+
 	switch config.Type {
 	case TunnelTypeClient:
 		if err := tm.createClientTunnel(tunnel); err != nil {
+			// Clean up container session if this was the first tunnel attempt
+			// This prevents orphaned sessions consuming resources
+			if isFirstTunnel {
+				if cleanupErr := tm.DestroyContainerSession(config.ContainerID); cleanupErr != nil {
+					// Log cleanup error but return original error
+					log.Printf("Failed to cleanup container session after tunnel creation failure: %v", cleanupErr)
+				}
+			}
 			return nil, fmt.Errorf("failed to create client tunnel: %w", err)
 		}
 	case TunnelTypeServer:
 		if err := tm.createServerTunnel(tunnel); err != nil {
+			// Clean up container session if this was the first tunnel attempt
+			// This prevents orphaned sessions consuming resources
+			if isFirstTunnel {
+				if cleanupErr := tm.DestroyContainerSession(config.ContainerID); cleanupErr != nil {
+					// Log cleanup error but return original error
+					log.Printf("Failed to cleanup container session after tunnel creation failure: %v", cleanupErr)
+				}
+			}
 			return nil, fmt.Errorf("failed to create server tunnel: %w", err)
 		}
 	default:
+		// Clean up container session if this was the first tunnel attempt
+		if isFirstTunnel {
+			if cleanupErr := tm.DestroyContainerSession(config.ContainerID); cleanupErr != nil {
+				log.Printf("Failed to cleanup container session after unknown tunnel type: %v", cleanupErr)
+			}
+		}
 		return nil, fmt.Errorf("unknown tunnel type: %s", config.Type)
 	}
 
@@ -242,6 +268,20 @@ func (tm *TunnelManager) ListTunnels() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// countContainerTunnels returns the number of tunnels for a specific container.
+//
+// This helper method is used to detect if a tunnel is the first one for a container,
+// which is important for cleanup logic when tunnel creation fails.
+func (tm *TunnelManager) countContainerTunnels(containerID string) int {
+	count := 0
+	for _, tunnel := range tm.tunnels {
+		if tunnel.config.ContainerID == containerID {
+			count++
+		}
+	}
+	return count
 }
 
 // DestroyTunnel removes and cleans up a tunnel.

@@ -140,11 +140,11 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 
 	// 2. Check for exposed ports in container options (medium priority)
 	if exposedPorts := sem.extractPortsFromOptions(options); len(exposedPorts) > 0 {
-		// Only add ports not already configured via labels
+		// Only add ports not already configured via labels with same exposure type
 		for _, port := range exposedPorts {
-			if !sem.isPortConfigured(port.ContainerPort, ports) {
-				// Default to I2P exposure for auto-detected ports (backward compatibility)
-				port.ExposureType = ExposureTypeI2P
+			// Default to I2P exposure for auto-detected ports (backward compatibility)
+			port.ExposureType = ExposureTypeI2P
+			if !sem.isPortConfigured(port.ContainerPort, port.ExposureType, ports) {
 				ports = append(ports, port)
 			}
 		}
@@ -153,9 +153,9 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 	// 3. Check for environment variables indicating services (lowest priority)
 	if envPorts := sem.extractPortsFromEnvironment(options); len(envPorts) > 0 {
 		for _, port := range envPorts {
-			if !sem.isPortConfigured(port.ContainerPort, ports) {
-				// Default to I2P exposure for auto-detected ports (backward compatibility)
-				port.ExposureType = ExposureTypeI2P
+			// Default to I2P exposure for auto-detected ports (backward compatibility)
+			port.ExposureType = ExposureTypeI2P
+			if !sem.isPortConfigured(port.ContainerPort, port.ExposureType, ports) {
 				ports = append(ports, port)
 			}
 		}
@@ -429,13 +429,15 @@ func (sem *ServiceExposureManager) parseExposureLabel(key string, value interfac
 	}
 }
 
-// isPortConfigured checks if a port is already configured in the given list.
+// isPortConfigured checks if a port with a specific exposure type is already configured.
 //
 // This helper method is used to implement priority-based port configuration,
 // where labels take precedence over Docker EXPOSE directives and environment variables.
-func (sem *ServiceExposureManager) isPortConfigured(port int, configuredPorts []ExposedPort) bool {
+// It considers both port number AND exposure type, allowing the same port to be exposed
+// via different types (e.g., both I2P and IP) as documented.
+func (sem *ServiceExposureManager) isPortConfigured(port int, exposureType ExposureType, configuredPorts []ExposedPort) bool {
 	for _, p := range configuredPorts {
-		if p.ContainerPort == port {
+		if p.ContainerPort == port && p.ExposureType == exposureType {
 			return true
 		}
 	}
@@ -444,46 +446,16 @@ func (sem *ServiceExposureManager) isPortConfigured(port int, configuredPorts []
 
 // createIPServiceExposure creates an IP-based service exposure.
 //
-// This method creates a ServiceExposure record for IP-based port forwarding.
-// Unlike I2P exposures, IP exposures do not create I2P tunnels - they simply
-// record the intention to expose a container port to a specific IP address.
-// The actual port forwarding implementation is a stub for now and will be
-// implemented in a future phase.
+// IP-based port forwarding is not yet implemented. This method returns an error
+// to prevent users from creating non-functional configurations that appear to work
+// but silently fail to expose services.
 //
-// Why this approach:
-// - Maintains consistent ServiceExposure tracking for all exposure types
-// - Allows the system to be aware of all port exposures regardless of type
-// - Provides a foundation for future port forwarding implementation
-// - Keeps the interface simple and predictable
+// Use I2P exposure (ExposureTypeI2P) instead, which is fully functional and
+// exposes services via .b32.i2p addresses accessible through the I2P network.
 func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
-	// Validate target IP - use default if not specified
-	targetIP := port.TargetIP
-	if targetIP == "" {
-		targetIP = "127.0.0.1" // Default to localhost for security
-	}
-
-	// Validate target IP format
-	if net.ParseIP(targetIP) == nil {
-		return nil, fmt.Errorf("invalid target IP address: %s", targetIP)
-	}
-
-	// Create a unique identifier for this IP exposure
-	exposureName := fmt.Sprintf("ip-%s-%d", containerID[:12], port.ContainerPort)
-
-	// Create ServiceExposure record
-	// Note: Tunnel is nil for IP exposures as no I2P tunnel is needed
-	exposure := &ServiceExposure{
-		ContainerID: containerID,
-		Port:        port,
-		Tunnel:      nil, // No I2P tunnel for IP exposure
-		Destination: fmt.Sprintf("%s:%d", targetIP, port.ContainerPort),
-		TunnelName:  exposureName,
-	}
-
-	log.Printf("Created IP service exposure: %s -> container %s:%d targeting %s:%d",
-		exposureName, containerIP.String(), port.ContainerPort, targetIP, port.ContainerPort)
-
-	return exposure, nil
+	// IP exposure is not yet implemented - return clear error to prevent confusion
+	return nil, fmt.Errorf("IP-based port exposure (i2p.expose.%d=ip) is not yet implemented. Use I2P exposure instead by omitting the 'ip:' prefix or using 'i2p' explicitly (e.g., i2p.expose.%d=i2p). Services will be exposed via .b32.i2p addresses",
+		port.ContainerPort, port.ContainerPort)
 }
 
 // createI2PServiceExposure creates an I2P-based service exposure.
@@ -498,8 +470,8 @@ func (sem *ServiceExposureManager) createI2PServiceExposure(containerID string, 
 // ExposeServices creates service exposures for the specified ports based on their exposure type.
 //
 // This method supports two exposure types:
-// - I2P exposure: Creates I2P server tunnels with .b32.i2p addresses
-// - IP exposure: Records IP-based port forwarding intentions (stub for now)
+// - I2P exposure: Creates I2P server tunnels with .b32.i2p addresses (fully functional)
+// - IP exposure: Returns an error as this feature is not yet implemented
 //
 // The method routes each port to the appropriate exposure handler based on
 // its ExposureType field. If no ExposureType is specified, it defaults to
