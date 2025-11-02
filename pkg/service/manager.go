@@ -28,6 +28,16 @@ import (
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
 )
 
+// ExposureType represents how a port should be exposed.
+type ExposureType string
+
+const (
+	// ExposureTypeI2P exposes the port to I2P network only (default)
+	ExposureTypeI2P ExposureType = "i2p"
+	// ExposureTypeIP exposes the port to specific IP interface
+	ExposureTypeIP ExposureType = "ip"
+)
+
 // ExposedPort represents a port that should be exposed over I2P.
 type ExposedPort struct {
 	// ContainerPort is the port inside the container
@@ -36,6 +46,18 @@ type ExposedPort struct {
 	Protocol string
 	// ServiceName is an optional name for the service
 	ServiceName string
+	// ExposureType defines how the port should be exposed (i2p or ip)
+	ExposureType ExposureType `json:"exposure_type,omitempty"`
+	// TargetIP is the IP address for IP-based exposure (only used when ExposureType is "ip")
+	TargetIP string `json:"target_ip,omitempty"`
+}
+
+// NetworkExposureConfig defines network-level exposure defaults.
+type NetworkExposureConfig struct {
+	// DefaultExposureType is the default exposure type for ports without explicit configuration
+	DefaultExposureType ExposureType
+	// AllowIPExposure determines if IP-based exposure is permitted
+	AllowIPExposure bool
 }
 
 // ServiceExposure represents an I2P service exposure configuration.
@@ -296,6 +318,90 @@ func (sem *ServiceExposureManager) parseEnvironmentPort(envVar string) *ExposedP
 	}
 
 	return nil
+}
+
+// extractPortsFromLabels extracts port exposure configuration from Docker labels.
+//
+// This method looks for labels with the prefix "i2p.expose." and parses them to
+// determine how ports should be exposed. Label format:
+//   - i2p.expose.80=i2p          (expose port 80 to I2P network)
+//   - i2p.expose.443=ip:127.0.0.1 (expose port 443 to localhost IP)
+func (sem *ServiceExposureManager) extractPortsFromLabels(options map[string]interface{}) []ExposedPort {
+	var ports []ExposedPort
+
+	// Look for Labels in options
+	if labels, ok := options["Labels"]; ok {
+		if labelMap, ok := labels.(map[string]interface{}); ok {
+			for key, value := range labelMap {
+				if strings.HasPrefix(key, "i2p.expose.") {
+					if port := sem.parseExposureLabel(key, value); port != nil {
+						ports = append(ports, *port)
+					}
+				}
+			}
+		}
+	}
+
+	return ports
+}
+
+// parseExposureLabel parses individual exposure labels.
+//
+// Label formats supported:
+//   - i2p.expose.80=i2p          (expose port 80 to I2P)
+//   - i2p.expose.443=ip:127.0.0.1 (expose port 443 to localhost)
+//
+// Returns nil if the label format is invalid.
+func (sem *ServiceExposureManager) parseExposureLabel(key string, value interface{}) *ExposedPort {
+	// Extract port number from label key (e.g., "i2p.expose.80" -> "80")
+	portStr := strings.TrimPrefix(key, "i2p.expose.")
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 || port > 65535 {
+		log.Printf("Warning: Invalid port in label %s: %v", key, err)
+		return nil
+	}
+
+	// Parse value (exposure configuration)
+	valueStr, ok := value.(string)
+	if !ok {
+		log.Printf("Warning: Invalid value type for label %s", key)
+		return nil
+	}
+
+	// Parse exposure configuration
+	// Format: "i2p" or "ip:127.0.0.1"
+	parts := strings.SplitN(valueStr, ":", 2)
+	exposureType := ExposureType(parts[0])
+
+	// Validate exposure type
+	if exposureType != ExposureTypeI2P && exposureType != ExposureTypeIP {
+		log.Printf("Warning: Invalid exposure type in label %s: %s", key, exposureType)
+		return nil
+	}
+
+	var targetIP string
+	if len(parts) > 1 {
+		targetIP = parts[1]
+	}
+
+	// If exposure type is IP but no target IP specified, default to localhost
+	if exposureType == ExposureTypeIP && targetIP == "" {
+		targetIP = "127.0.0.1"
+	}
+
+	// Validate IP address format when provided and not empty
+	if targetIP != "" && net.ParseIP(targetIP) == nil {
+		log.Printf("Warning: Invalid target IP in label %s: %s", key, targetIP)
+		return nil
+	}
+
+	return &ExposedPort{
+		ContainerPort: port,
+		Protocol:      "tcp",
+		ServiceName:   fmt.Sprintf("service-%d", port),
+		ExposureType:  exposureType,
+		TargetIP:      targetIP,
+	}
 }
 
 // ExposeServices creates I2P server tunnels for the specified exposed ports.
