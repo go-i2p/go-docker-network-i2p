@@ -321,13 +321,12 @@ func (p *Plugin) handleProgramExternalConnectivity(w http.ResponseWriter, r *htt
 	log.Printf("Programming external connectivity for endpoint %s on network %s", req.EndpointID, req.NetworkID)
 
 	// I2P networks use .b32.i2p addresses instead of host port mappings.
-	// Service exposure is handled automatically during Join for containers with --expose.
-	// Explicit port mappings via -p flag are not applicable to I2P networks.
-	log.Printf("Note: I2P networks expose services via .b32.i2p addresses, not host port mappings")
-
-	// Return success - Docker calls this for port mapping setup, but I2P handles
-	// service exposure differently (via automatic .b32.i2p generation in Join)
-	p.writeJSONResponse(w, ErrorResponse{Err: ""})
+	// Reject -p port mappings with a clear error to prevent user confusion.
+	// Service exposure should be done via --expose flag or i2p.expose.* labels.
+	log.Printf("Rejecting port mapping request: I2P networks do not support -p flag")
+	p.writeJSONResponse(w, ErrorResponse{
+		Err: "I2P networks do not support -p port mappings. Services are exposed via .b32.i2p addresses. Use --expose to expose container ports to the I2P network, or use i2p.expose.* labels for advanced configuration.",
+	})
 }
 
 // handleRevokeExternalConnectivity removes external connectivity.
