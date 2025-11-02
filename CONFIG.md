@@ -272,6 +272,14 @@ Container labels provide per-port exposure configuration:
 - `i2p.expose.3000=ip:192.168.1.100` - Expose port 3000 to specific IP
 - `i2p.expose.9090=ip:::1` - Expose port 9090 to IPv6 localhost
 
+**Validation**: Invalid IP addresses in exposure labels will cause the port to not be exposed (fail-safe behavior). Check plugin logs for validation warnings if ports aren't exposed as expected:
+```bash
+# Check for IP validation errors in plugin logs
+sudo journalctl -u i2p-network-plugin | grep "Invalid target IP"
+# Or if running as container:
+docker logs i2p-network-plugin 2>&1 | grep "Invalid target IP"
+```
+
 #### Network-Level Configuration
 
 Network-level options set defaults for all containers on the network:
@@ -288,10 +296,12 @@ Network-level options set defaults for all containers on the network:
 
 #### Configuration Precedence
 
-Port exposure configuration follows this priority order:
-1. **Container labels** (`i2p.expose.*`) - Highest priority, overrides all other sources
-2. **Docker EXPOSE directives** - Medium priority, defaults to network's `i2p.exposure.default`
-3. **Environment variables** (`PORT`, `HTTP_PORT`, etc.) - Lowest priority, defaults to network's `i2p.exposure.default`
+Port exposure sources are combined with the following precedence:
+1. **Container labels** (`i2p.expose.*`) - Explicit port configuration
+2. **Docker EXPOSE directives** - Automatic port detection, defaults to network's `i2p.exposure.default`
+3. **Environment variables** (`PORT`, `HTTP_PORT`, etc.) - Automatic port detection, defaults to network's `i2p.exposure.default`
+
+**Important**: Labels *augment* rather than override automatic detection. If you specify a label for a port that's also in EXPOSE, both configurations will be applied if they have different exposure types (e.g., `i2p.expose.80=ip` + `EXPOSE 80` results in both IP and I2P exposure for port 80). To prevent auto-exposure of a port, explicitly configure all ports you want exposed via labels.
 
 Network policy (`i2p.exposure.allow_ip`) is always enforced regardless of configuration source.
 

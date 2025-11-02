@@ -53,9 +53,15 @@ docker run -d --name anonymous-web \
   nginx:alpine
 
 # Get service .b32.i2p address from plugin logs
+# If running as system daemon (default installation):
+sudo journalctl -u i2p-network-plugin | grep "exposed as"
+# Or check recent plugin output:
+journalctl -xe | grep "i2p-network-plugin" | grep "exposed as"
+
+# If running as Docker container (via make docker-run):
 docker logs i2p-network-plugin 2>&1 | grep "exposed as"
 
-# Or inspect network settings (addresses in network options)
+# Or inspect container network settings (always available):
 docker inspect anonymous-web | grep -A 10 "com.i2p.service.addresses"
 ```
 
@@ -65,7 +71,6 @@ docker inspect anonymous-web | grep -A 10 "com.i2p.service.addresses"
 ⚙️ **[CONFIG.md](CONFIG.md)** - Complete configuration reference  
 🔧 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Diagnostic and troubleshooting guide  
 ⚠️ **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** - Current limitations and known issues  
-🗺️ **[PLAN.md](PLAN.md)** - Development roadmap and project status  
 
 ## Architecture
 
@@ -177,7 +182,7 @@ make coverage
 # Build with race detection
 make test-race
 
-# View all available targets
+# View all available targets (organized by category)
 make help
 ```
 
@@ -227,16 +232,14 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 - ✅ **Service Exposure**: Automatic I2P server tunnel creation
 - ✅ **Traffic Proxying**: Transparent SOCKS and DNS proxying
 - ✅ **Traffic Filtering**: Allowlist/blocklist with wildcard support
-- ✅ **Testing Infrastructure**: Comprehensive test suite (average >60% coverage)
-
-See [PLAN.md](PLAN.md) for detailed development roadmap.
+- ✅ **Testing Infrastructure**: Test suite with ~64% average coverage (I2P: 82%, Service: 91%, Plugin: 60%, Proxy: 49%)
 
 ## Contributing
 
 We welcome contributions! Please see:
 
 - **Issues**: [GitHub Issues](https://github.com/go-i2p/go-docker-network-i2p/issues)
-- **Development**: [PLAN.md](PLAN.md) for current development status
+- **Development**: Check GitHub Issues and Milestones for current development status
 - **Testing**: Run `make test` to verify changes
 - **Documentation**: Update relevant `.md` files for new features
 
