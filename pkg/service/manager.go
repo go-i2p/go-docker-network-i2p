@@ -18,14 +18,19 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
+	"github.com/go-i2p/go-forward/config"
+	"github.com/go-i2p/go-forward/packet"
+	"github.com/go-i2p/go-forward/stream"
 )
 
 // ExposureType represents how a port should be exposed.
@@ -66,12 +71,32 @@ type ServiceExposure struct {
 	ContainerID string
 	// Port is the exposed port configuration
 	Port ExposedPort
-	// Tunnel is the I2P server tunnel for this service
+	// Tunnel is the I2P server tunnel for this service (nil for IP exposure)
 	Tunnel *i2p.Tunnel
-	// Destination is the I2P destination address (.b32.i2p format)
+	// Destination is the I2P destination address (.b32.i2p format) or IP:port for IP exposure
 	Destination string
 	// TunnelName is the internal name for the tunnel
 	TunnelName string
+	// Forwarder handles port forwarding for IP exposure (nil for I2P exposure)
+	Forwarder *PortForwarder
+}
+
+// PortForwarder manages TCP/UDP port forwarding from host to container.
+type PortForwarder struct {
+	// protocol is either "tcp" or "udp"
+	protocol string
+	// listener accepts TCP connections on the host interface (nil for UDP)
+	listener net.Listener
+	// packetConn handles UDP packets on the host interface (nil for TCP)
+	packetConn net.PacketConn
+	// targetAddr is the container IP:port to forward to
+	targetAddr string
+	// ctx provides cancellation context
+	ctx context.Context
+	// cancel cancels the context
+	cancel context.CancelFunc
+	// wg tracks active forwarding goroutines
+	wg sync.WaitGroup
 }
 
 // ServiceExposureManager manages I2P service exposure for containers.
@@ -465,7 +490,8 @@ func (sem *ServiceExposureManager) isPortConfiguredAny(port int, configuredPorts
 // This is useful for local development or when I2P anonymity is not required.
 //
 // Unlike I2P exposure which creates .b32.i2p addresses, IP exposure provides
-// standard IP:port access to the container service.
+// standard IP:port access to the container service using go-forward for
+// efficient TCP port forwarding.
 func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
 	// Validate and set default target IP
 	targetIP := port.TargetIP
@@ -482,13 +508,32 @@ func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, c
 	// Generate unique exposure name
 	exposureName := fmt.Sprintf("ip-%s-%s-%d", containerID, port.ServiceName, port.ContainerPort)
 
-	// Format destination as IP:port
-	// Handle IPv6 addresses with brackets
-	destination := fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
+	// Format listen address (brackets needed for IPv6 in net.Listen)
+	listenAddr := fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
 	if parsedIP.To4() == nil {
-		// IPv6 address - use bracket notation
-		destination = fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
+		// IPv6 address - use bracket notation for listener
+		listenAddr = fmt.Sprintf("[%s]:%d", targetIP, port.ContainerPort)
 	}
+
+	// Format destination (without brackets, for consistency with documentation)
+	destination := fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
+
+	// Format container target address
+	containerAddr := fmt.Sprintf("%s:%d", containerIP.String(), port.ContainerPort)
+
+	// Determine protocol (default to TCP if not specified)
+	protocol := strings.ToLower(port.Protocol)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+
+	// Create port forwarder with protocol support
+	forwarder, err := newPortForwarder(protocol, listenAddr, containerAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create port forwarder for %s: %w", exposureName, err)
+	}
+
+	log.Printf("IP exposure created: %s/%s -> %s (container %s)", listenAddr, protocol, containerAddr, containerID)
 
 	return &ServiceExposure{
 		ContainerID: containerID,
@@ -496,7 +541,169 @@ func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, c
 		Tunnel:      nil, // No I2P tunnel for IP exposure
 		Destination: destination,
 		TunnelName:  exposureName,
+		Forwarder:   forwarder,
 	}, nil
+}
+
+// newPortForwarder creates and starts a new port forwarder for TCP or UDP.
+func newPortForwarder(protocol, listenAddr, targetAddr string) (*PortForwarder, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	pf := &PortForwarder{
+		protocol:   protocol,
+		targetAddr: targetAddr,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	switch protocol {
+	case "tcp":
+		listener, err := net.Listen("tcp", listenAddr)
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("failed to listen on tcp %s: %w", listenAddr, err)
+		}
+		pf.listener = listener
+
+		// Start accepting TCP connections
+		pf.wg.Add(1)
+		go pf.acceptLoop()
+
+	case "udp":
+		packetConn, err := net.ListenPacket("udp", listenAddr)
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("failed to listen on udp %s: %w", listenAddr, err)
+		}
+		pf.packetConn = packetConn
+
+		// Start forwarding UDP packets
+		pf.wg.Add(1)
+		go pf.forwardPackets()
+
+	default:
+		cancel()
+		return nil, fmt.Errorf("unsupported protocol: %s (must be tcp or udp)", protocol)
+	}
+
+	return pf, nil
+}
+
+// acceptLoop accepts incoming connections and forwards them to the target.
+func (pf *PortForwarder) acceptLoop() {
+	defer pf.wg.Done()
+
+	for {
+		conn, err := pf.listener.Accept()
+		if err != nil {
+			select {
+			case <-pf.ctx.Done():
+				return // Shutdown requested
+			default:
+				log.Printf("Error accepting connection: %v", err)
+				return
+			}
+		}
+
+		// Handle connection in separate goroutine
+		pf.wg.Add(1)
+		go pf.handleConnection(conn)
+	}
+}
+
+// handleConnection forwards a single TCP connection to the target.
+func (pf *PortForwarder) handleConnection(clientConn net.Conn) {
+	defer pf.wg.Done()
+	defer clientConn.Close()
+
+	// Connect to container
+	targetConn, err := net.DialTimeout("tcp", pf.targetAddr, 10*time.Second)
+	if err != nil {
+		log.Printf("Failed to connect to target %s: %v", pf.targetAddr, err)
+		return
+	}
+	defer targetConn.Close()
+
+	// Use go-forward to handle bidirectional forwarding
+	cfg := config.DefaultConfig()
+	cfg.EnableMetrics = false // Disable metrics for simplicity
+
+	if err := stream.Forward(pf.ctx, clientConn, targetConn, cfg); err != nil {
+		if err != context.Canceled && err != io.EOF {
+			log.Printf("TCP forwarding error for %s: %v", pf.targetAddr, err)
+		}
+	}
+}
+
+// forwardPackets handles UDP packet forwarding between host and container.
+func (pf *PortForwarder) forwardPackets() {
+	defer pf.wg.Done()
+
+	// Connect to container UDP endpoint
+	targetConn, err := net.ListenPacket("udp", ":0")
+	if err != nil {
+		log.Printf("Failed to create UDP target connection: %v", err)
+		return
+	}
+	defer targetConn.Close()
+
+	// Resolve target address
+	targetAddr, err := net.ResolveUDPAddr("udp", pf.targetAddr)
+	if err != nil {
+		log.Printf("Failed to resolve target address %s: %v", pf.targetAddr, err)
+		return
+	}
+
+	// Create a simple UDP forwarder that maps client addresses to target
+	// Note: This is a simplified implementation. For production, consider
+	// using a more sophisticated NAT table with connection tracking.
+	cfg := config.DefaultConfig()
+	cfg.EnableMetrics = false
+
+	// Create a wrapped packet connection that always sends to the target address
+	wrappedTarget := &udpTargetConn{
+		PacketConn: targetConn,
+		targetAddr: targetAddr,
+	}
+
+	// Use go-forward for bidirectional UDP forwarding
+	if err := packet.Forward(pf.ctx, pf.packetConn, wrappedTarget, cfg); err != nil {
+		if err != context.Canceled {
+			log.Printf("UDP forwarding error for %s: %v", pf.targetAddr, err)
+		}
+	}
+}
+
+// udpTargetConn wraps a PacketConn to always write to a fixed target address
+type udpTargetConn struct {
+	net.PacketConn
+	targetAddr net.Addr
+}
+
+func (u *udpTargetConn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
+	return u.PacketConn.WriteTo(p, u.targetAddr)
+}
+
+// Stop stops the port forwarder and waits for all connections to close.
+func (pf *PortForwarder) Stop() error {
+	pf.cancel()
+
+	// Close listener/packet connection to stop accepting new connections
+	if pf.listener != nil {
+		if err := pf.listener.Close(); err != nil {
+			log.Printf("Error closing TCP listener: %v", err)
+		}
+	}
+	if pf.packetConn != nil {
+		if err := pf.packetConn.Close(); err != nil {
+			log.Printf("Error closing UDP packet connection: %v", err)
+		}
+	}
+
+	// Wait for all forwarding goroutines to finish
+	pf.wg.Wait()
+
+	return nil
 }
 
 // createI2PServiceExposure creates an I2P-based service exposure.
@@ -663,16 +870,21 @@ func (sem *ServiceExposureManager) CleanupServices(containerID string) error {
 
 	var errors []string
 
-	// Clean up all tunnels for this container
+	// Clean up all tunnels and forwarders for this container
 	for _, exposure := range exposures {
-		// Skip IP exposures that don't have tunnels
-		if exposure.Tunnel == nil {
-			log.Printf("Skipping tunnel cleanup for IP exposure %s", exposure.TunnelName)
-			continue
+		// Clean up I2P tunnel if present
+		if exposure.Tunnel != nil {
+			if err := sem.tunnelMgr.DestroyTunnel(exposure.TunnelName); err != nil {
+				errors = append(errors, fmt.Sprintf("failed to destroy tunnel %s: %v", exposure.TunnelName, err))
+			}
 		}
 
-		if err := sem.tunnelMgr.DestroyTunnel(exposure.TunnelName); err != nil {
-			errors = append(errors, fmt.Sprintf("failed to destroy tunnel %s: %v", exposure.TunnelName, err))
+		// Clean up port forwarder if present
+		if exposure.Forwarder != nil {
+			log.Printf("Stopping port forwarder for %s", exposure.TunnelName)
+			if err := exposure.Forwarder.Stop(); err != nil {
+				errors = append(errors, fmt.Sprintf("failed to stop forwarder %s: %v", exposure.TunnelName, err))
+			}
 		}
 	}
 
