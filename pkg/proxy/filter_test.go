@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -302,7 +303,9 @@ func TestTrafficFilter_WildcardMatching(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched := filter.matchesWildcard(tt.destination, tt.pattern)
+			// Create regex cache for testing (empty cache forces pattern compilation)
+			regexCache := make(map[string]*regexp.Regexp)
+			matched := filter.matchesWildcardCached(tt.destination, tt.pattern, regexCache)
 			if matched != tt.shouldMatch {
 				t.Errorf("Expected match=%v for destination '%s' and pattern '%s', got %v",
 					tt.shouldMatch, tt.destination, tt.pattern, matched)
