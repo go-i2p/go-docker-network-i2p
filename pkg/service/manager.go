@@ -167,12 +167,12 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 
 	// 2. Check for exposed ports in container options (medium priority)
 	if exposedPorts := sem.extractPortsFromOptions(options); len(exposedPorts) > 0 {
-		// Only add ports not already configured via labels (any exposure type)
-		// This enforces label priority: if a port is labeled, ignore EXPOSE directives
+		// Add ports not already configured via labels with the same exposure type
+		// This allows same port with different exposure types (e.g., both I2P and IP)
 		for _, port := range exposedPorts {
 			// Default to I2P exposure for auto-detected ports (backward compatibility)
 			port.ExposureType = ExposureTypeI2P
-			if !sem.isPortConfiguredAny(port.ContainerPort, ports) {
+			if !sem.isPortConfigured(port.ContainerPort, port.ExposureType, ports) {
 				ports = append(ports, port)
 			}
 		}
@@ -183,7 +183,7 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 		for _, port := range envPorts {
 			// Default to I2P exposure for auto-detected ports (backward compatibility)
 			port.ExposureType = ExposureTypeI2P
-			if !sem.isPortConfiguredAny(port.ContainerPort, ports) {
+			if !sem.isPortConfigured(port.ContainerPort, port.ExposureType, ports) {
 				ports = append(ports, port)
 			}
 		}
@@ -463,6 +463,10 @@ func (sem *ServiceExposureManager) parseExposureLabel(key string, value interfac
 // where labels take precedence over Docker EXPOSE directives and environment variables.
 // It considers both port number AND exposure type, allowing the same port to be exposed
 // via different types (e.g., both I2P and IP) as documented.
+// isPortConfigured checks if a port with specific exposure type is already configured.
+//
+// This allows the same port number to be exposed with different exposure types
+// (e.g., port 80 can be exposed via both I2P and IP simultaneously).
 func (sem *ServiceExposureManager) isPortConfigured(port int, exposureType ExposureType, configuredPorts []ExposedPort) bool {
 	for _, p := range configuredPorts {
 		if p.ContainerPort == port && p.ExposureType == exposureType {
@@ -474,8 +478,8 @@ func (sem *ServiceExposureManager) isPortConfigured(port int, exposureType Expos
 
 // isPortConfiguredAny checks if a port is configured with any exposure type.
 //
-// This is used to enforce label priority - if a port is configured via label
-// (regardless of exposure type), lower-priority sources should not add it again.
+// This is used for strict priority enforcement where any configuration
+// of a port (regardless of exposure type) blocks further auto-detection.
 func (sem *ServiceExposureManager) isPortConfiguredAny(port int, configuredPorts []ExposedPort) bool {
 	for _, p := range configuredPorts {
 		if p.ContainerPort == port {
