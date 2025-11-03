@@ -231,7 +231,7 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 - ✅ **Service Exposure**: Automatic I2P server tunnel creation
 - ✅ **Traffic Proxying**: Transparent SOCKS and DNS proxying
 - ✅ **Traffic Filtering**: Allowlist/blocklist with wildcard support
-- ✅ **Testing Infrastructure**: Test suite with ~64% average coverage (I2P: 82%, Service: 91%, Plugin: 60%, Proxy: 49%)
+- ✅ **Testing Infrastructure**: Test suite with ~67% average coverage (Config: 89%, I2P: 78%, Service: 92%, Plugin: 28%, Proxy: 47%)
 
 ## Contributing
 
