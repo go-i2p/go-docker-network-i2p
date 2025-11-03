@@ -104,8 +104,9 @@ func (t *TrafficInterceptor) generateIptablesRules() []string {
 		fmt.Sprintf("-t nat -A I2P_REDIRECT -s %s -p tcp ! --dport %d -j REDIRECT --to-port %d",
 			subnet, t.proxyPort, t.proxyPort),
 
-		// Apply I2P_REDIRECT chain to OUTPUT traffic from containers
-		fmt.Sprintf("-t nat -A OUTPUT -s %s -j I2P_REDIRECT", subnet),
+		// Apply I2P_REDIRECT chain to FORWARD traffic from containers
+		// Note: Container traffic goes through FORWARD chain, not OUTPUT (which is for host-generated traffic)
+		fmt.Sprintf("-t nat -A FORWARD -s %s -j I2P_REDIRECT", subnet),
 
 		// Create custom chain for traffic filtering
 		"-t filter -N I2P_FILTER",
@@ -128,8 +129,9 @@ func (t *TrafficInterceptor) generateIptablesRules() []string {
 		fmt.Sprintf("-t filter -A I2P_FILTER -s %s -j LOG --log-prefix \"I2P-DROP: \"", subnet),
 		fmt.Sprintf("-t filter -A I2P_FILTER -s %s -j DROP", subnet),
 
-		// Apply I2P_FILTER chain to OUTPUT traffic from containers
-		fmt.Sprintf("-t filter -A OUTPUT -s %s -j I2P_FILTER", subnet),
+		// Apply I2P_FILTER chain to FORWARD traffic from containers
+		// Note: Container traffic goes through FORWARD chain, not OUTPUT (which is for host-generated traffic)
+		fmt.Sprintf("-t filter -A FORWARD -s %s -j I2P_FILTER", subnet),
 	}
 }
 

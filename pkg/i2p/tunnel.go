@@ -554,8 +554,21 @@ func (tm *TunnelManager) GetOrCreateContainerSession(containerID string) (*sam3.
 // This should be called when a container is removed to clean up I2P resources.
 func (tm *TunnelManager) DestroyContainerSession(containerID string) error {
 	session, exists := tm.containerSessions[containerID]
+
+	// Always attempt to clean up SAM client, even if session doesn't exist
+	// This handles cases where session creation partially failed
+	if samClient, samExists := tm.containerSAMClients[containerID]; samExists {
+		log.Printf("Disconnecting SAM client for container %s", containerID)
+		if err := samClient.Disconnect(); err != nil {
+			log.Printf("Warning: Error disconnecting SAM client for container %s: %v", containerID, err)
+		}
+		delete(tm.containerSAMClients, containerID)
+	}
+
+	// Clean up session if it exists
 	if !exists {
-		return nil // No session to clean up
+		log.Printf("No session to clean up for container %s (SAM client cleaned if present)", containerID)
+		return nil
 	}
 
 	// Close the primary session
@@ -565,16 +578,7 @@ func (tm *TunnelManager) DestroyContainerSession(containerID string) error {
 		// Continue with cleanup even if close fails
 	}
 
-	// Close the SAM client for this container
-	if samClient, exists := tm.containerSAMClients[containerID]; exists {
-		log.Printf("Disconnecting SAM client for container %s", containerID)
-		if err := samClient.Disconnect(); err != nil {
-			log.Printf("Warning: Error disconnecting SAM client for container %s: %v", containerID, err)
-		}
-		delete(tm.containerSAMClients, containerID)
-	}
-
-	// Remove from the map regardless of type
+	// Remove from the map
 	delete(tm.containerSessions, containerID)
 	log.Printf("Destroyed container session for container %s", containerID)
 	return nil
