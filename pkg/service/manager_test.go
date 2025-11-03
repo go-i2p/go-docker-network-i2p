@@ -1620,3 +1620,123 @@ func TestExposeServicesDefaultType(t *testing.T) {
 		t.Errorf("Failed to cleanup services: %v", err)
 	}
 }
+
+// TestUDPPortForwarding tests UDP port forwarding functionality.
+func TestUDPPortForwarding(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager, err := NewServiceExposureManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create service exposure manager: %v", err)
+	}
+
+	containerID := "test-container-udp"
+	containerIP := net.ParseIP("172.20.0.20")
+
+	// Test UDP port exposure
+	port := ExposedPort{
+		ContainerPort: 15353, // Use unprivileged port
+		Protocol:      "udp",
+		ServiceName:   "dns",
+		ExposureType:  ExposureTypeIP,
+		TargetIP:      "127.0.0.1",
+	}
+
+	exposure, err := manager.createIPServiceExposure(containerID, containerIP, port)
+	if err != nil {
+		t.Fatalf("Failed to create UDP exposure: %v", err)
+	}
+	defer exposure.Forwarder.Stop()
+
+	// Verify exposure properties
+	if exposure.Forwarder == nil {
+		t.Fatal("UDP exposure should have forwarder")
+	}
+	if exposure.Forwarder.protocol != "udp" {
+		t.Errorf("Expected protocol udp, got %s", exposure.Forwarder.protocol)
+	}
+	if exposure.Forwarder.packetConn == nil {
+		t.Error("UDP forwarder should have packet connection")
+	}
+	if exposure.Forwarder.listener != nil {
+		t.Error("UDP forwarder should not have TCP listener")
+	}
+	if exposure.Destination != "127.0.0.1:15353" {
+		t.Errorf("Expected destination 127.0.0.1:15353, got %s", exposure.Destination)
+	}
+}
+
+// TestTCPAndUDPMixedForwarding tests both TCP and UDP exposures in same container.
+func TestTCPAndUDPMixedForwarding(t *testing.T) {
+	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	if err != nil {
+		t.Fatalf("Failed to create SAM client: %v", err)
+	}
+
+	tunnelMgr := i2p.NewTunnelManager(samClient)
+	manager, err := NewServiceExposureManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create service exposure manager: %v", err)
+	}
+
+	containerID := "test-container-mixed-protocols"
+	containerIP := net.ParseIP("172.20.0.21")
+
+	tests := []struct {
+		name     string
+		port     ExposedPort
+		expected string
+	}{
+		{
+			name: "TCP port",
+			port: ExposedPort{
+				ContainerPort: 18888,
+				Protocol:      "tcp",
+				ServiceName:   "http",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "127.0.0.1",
+			},
+			expected: "tcp",
+		},
+		{
+			name: "UDP port",
+			port: ExposedPort{
+				ContainerPort: 18889,
+				Protocol:      "udp",
+				ServiceName:   "dns",
+				ExposureType:  ExposureTypeIP,
+				TargetIP:      "127.0.0.1",
+			},
+			expected: "udp",
+		},
+	}
+
+	var exposures []*ServiceExposure
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exposure, err := manager.createIPServiceExposure(containerID, containerIP, tt.port)
+			if err != nil {
+				t.Fatalf("Failed to create exposure: %v", err)
+			}
+			exposures = append(exposures, exposure)
+
+			if exposure.Forwarder == nil {
+				t.Fatal("Exposure should have forwarder")
+			}
+			if exposure.Forwarder.protocol != tt.expected {
+				t.Errorf("Expected protocol %s, got %s", tt.expected, exposure.Forwarder.protocol)
+			}
+		})
+	}
+
+	// Cleanup
+	for _, exp := range exposures {
+		if exp.Forwarder != nil {
+			exp.Forwarder.Stop()
+		}
+	}
+}
