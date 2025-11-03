@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -1097,47 +1098,42 @@ func TestDetectExposedPortsWithLabels(t *testing.T) {
 				},
 				"ExposedPorts": map[string]interface{}{
 					"8080/tcp": map[string]interface{}{},
-					"80/tcp":   map[string]interface{}{}, // Should be ignored (label takes priority)
+					"80/tcp":   map[string]interface{}{}, // Creates I2P exposure (different type than label's IP)
 				},
 				"Env": []interface{}{
 					"PORT=3000",
-					"HTTP_PORT=80", // Should be ignored (label takes priority)
+					"HTTP_PORT=80", // Creates I2P exposure (different type than label's IP)
 				},
 			},
-			expectedPorts: 4, // 2 from labels + 1 from EXPOSE (8080) + 1 from env (3000)
+			expectedPorts: 5, // Per Issue #14 fix: 2 from labels + 1 EXPOSE(8080) + 1 EXPOSE/env(80 I2P deduplicated) + 1 env(3000)
 			validate: func(t *testing.T, ports []ExposedPort) {
-				// Count exposure types
-				ipCount := 0
-				i2pCount := 0
+				// Count exposures per port/type
+				portExposures := make(map[string]int) // key: "port/type"
 				for _, port := range ports {
-					switch port.ContainerPort {
-					case 80:
-						if port.ExposureType != ExposureTypeIP {
-							t.Errorf("Port 80 should be IP exposure from label, got %s", port.ExposureType)
+					key := fmt.Sprintf("%d/%s", port.ContainerPort, port.ExposureType)
+					portExposures[key]++
+
+					// Validate specific configurations
+					if port.ContainerPort == 80 && port.ExposureType == ExposureTypeIP {
+						if port.TargetIP != "0.0.0.0" {
+							t.Errorf("Port 80 IP exposure should have target 0.0.0.0, got %s", port.TargetIP)
 						}
-						ipCount++
-					case 443:
-						if port.ExposureType != ExposureTypeI2P {
-							t.Errorf("Port 443 should be I2P exposure from label, got %s", port.ExposureType)
-						}
-						i2pCount++
-					case 8080:
-						if port.ExposureType != ExposureTypeI2P {
-							t.Errorf("Port 8080 should default to I2P exposure, got %s", port.ExposureType)
-						}
-						i2pCount++
-					case 3000:
-						if port.ExposureType != ExposureTypeI2P {
-							t.Errorf("Port 3000 should default to I2P exposure, got %s", port.ExposureType)
-						}
-						i2pCount++
 					}
 				}
-				if ipCount != 1 {
-					t.Errorf("Expected 1 IP exposure, got %d", ipCount)
+
+				// Verify expected exposures
+				expectedExposures := map[string]int{
+					"80/ip":    1, // From label
+					"80/i2p":   1, // From EXPOSE (deduplicated with env's HTTP_PORT=80)
+					"443/i2p":  1, // From label
+					"8080/i2p": 1, // From EXPOSE
+					"3000/i2p": 1, // From env
 				}
-				if i2pCount != 3 {
-					t.Errorf("Expected 3 I2P exposures, got %d", i2pCount)
+
+				for key, expectedCount := range expectedExposures {
+					if actualCount := portExposures[key]; actualCount != expectedCount {
+						t.Errorf("Expected %d exposure for %s, got %d", expectedCount, key, actualCount)
+					}
 				}
 			},
 		},
