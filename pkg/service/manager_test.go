@@ -1026,13 +1026,28 @@ func TestDetectExposedPortsWithLabels(t *testing.T) {
 					"80/tcp": map[string]interface{}{}, // EXPOSE says port 80
 				},
 			},
-			expectedPorts: 1,
+			expectedPorts: 2, // Both IP (label) and I2P (EXPOSE) exposures allowed per Issue #14 fix
 			validate: func(t *testing.T, ports []ExposedPort) {
-				if ports[0].ExposureType != ExposureTypeIP {
-					t.Errorf("Expected IP exposure from label, got %s", ports[0].ExposureType)
+				// Port 80 should have both IP and I2P exposures
+				ipFound := false
+				i2pFound := false
+				for _, port := range ports {
+					if port.ContainerPort == 80 {
+						if port.ExposureType == ExposureTypeIP {
+							if port.TargetIP != "127.0.0.1" {
+								t.Errorf("Expected target IP 127.0.0.1, got %s", port.TargetIP)
+							}
+							ipFound = true
+						} else if port.ExposureType == ExposureTypeI2P {
+							i2pFound = true
+						}
+					}
 				}
-				if ports[0].TargetIP != "127.0.0.1" {
-					t.Errorf("Expected target IP 127.0.0.1, got %s", ports[0].TargetIP)
+				if !ipFound {
+					t.Errorf("Expected IP exposure from label for port 80")
+				}
+				if !i2pFound {
+					t.Errorf("Expected I2P exposure from EXPOSE for port 80")
 				}
 			},
 		},
