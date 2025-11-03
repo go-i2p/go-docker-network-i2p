@@ -21,6 +21,10 @@ type TrafficFilter struct {
 	allowlist map[string]bool
 	// blocklist contains blocked I2P destinations
 	blocklist map[string]bool
+	// allowlistRegex contains pre-compiled regex patterns for allowlist wildcards
+	allowlistRegex map[string]*regexp.Regexp
+	// blocklistRegex contains pre-compiled regex patterns for blocklist wildcards
+	blocklistRegex map[string]*regexp.Regexp
 	// stats tracks traffic statistics
 	stats *TrafficStats
 	// mutex protects concurrent access to filter state

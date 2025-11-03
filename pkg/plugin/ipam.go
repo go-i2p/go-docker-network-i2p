@@ -71,7 +71,7 @@ func (a *IPAllocator) AllocateIP() (net.IP, error) {
 	// Calculate maximum IPs in subnet to prevent infinite loop
 	ones, bits := a.subnet.Mask.Size()
 	maxIPs := 1 << (bits - ones)
-	
+
 	// Track attempts to detect when we've checked all IPs
 	attempts := 0
 
@@ -106,7 +106,7 @@ func (a *IPAllocator) AllocateIP() (net.IP, error) {
 			a.incrementIP(a.nextIP)
 		}
 	}
-	
+
 	// Exhausted all IPs in subnet
 	return nil, fmt.Errorf("no available IP addresses in subnet %s", a.subnet)
 }
