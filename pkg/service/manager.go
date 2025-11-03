@@ -55,6 +55,8 @@ type ExposedPort struct {
 	ExposureType ExposureType `json:"exposure_type,omitempty"`
 	// TargetIP is the IP address for IP-based exposure (only used when ExposureType is "ip")
 	TargetIP string `json:"target_ip,omitempty"`
+	// HostPort is the port on the host to bind (only used for -p port mappings, defaults to ContainerPort)
+	HostPort int `json:"host_port,omitempty"`
 }
 
 // NetworkExposureConfig defines network-level exposure defaults.
@@ -505,18 +507,24 @@ func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, c
 		return nil, fmt.Errorf("invalid target IP address: %s", targetIP)
 	}
 
+	// Determine host port (defaults to container port if not specified)
+	hostPort := port.HostPort
+	if hostPort == 0 {
+		hostPort = port.ContainerPort
+	}
+
 	// Generate unique exposure name
 	exposureName := fmt.Sprintf("ip-%s-%s-%d", containerID, port.ServiceName, port.ContainerPort)
 
 	// Format listen address (brackets needed for IPv6 in net.Listen)
-	listenAddr := fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
+	listenAddr := fmt.Sprintf("%s:%d", targetIP, hostPort)
 	if parsedIP.To4() == nil {
 		// IPv6 address - use bracket notation for listener
-		listenAddr = fmt.Sprintf("[%s]:%d", targetIP, port.ContainerPort)
+		listenAddr = fmt.Sprintf("[%s]:%d", targetIP, hostPort)
 	}
 
 	// Format destination (without brackets, for consistency with documentation)
-	destination := fmt.Sprintf("%s:%d", targetIP, port.ContainerPort)
+	destination := fmt.Sprintf("%s:%d", targetIP, hostPort)
 
 	// Format container target address
 	containerAddr := fmt.Sprintf("%s:%d", containerIP.String(), port.ContainerPort)

@@ -1,9 +1,13 @@
 package plugin
 
 import (
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
+
+	"github.com/go-i2p/go-docker-network-i2p/pkg/service"
 )
 
 // handleGetCapabilities returns the capabilities of the network driver.
@@ -328,8 +332,8 @@ func (p *Plugin) handleDiscoverDelete(w http.ResponseWriter, r *http.Request) {
 
 // handleProgramExternalConnectivity sets up external connectivity.
 //
-// This would typically handle port mapping, but for I2P we handle
-// this through I2P tunnels instead.
+// Docker calls this when the user specifies port mappings via -p flag.
+// For I2P networks with IP exposure enabled, we create TCP/UDP port forwarding.
 func (p *Plugin) handleProgramExternalConnectivity(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received NetworkDriver.ProgramExternalConnectivity request")
 
@@ -342,13 +346,148 @@ func (p *Plugin) handleProgramExternalConnectivity(w http.ResponseWriter, r *htt
 
 	log.Printf("Programming external connectivity for endpoint %s on network %s", req.EndpointID, req.NetworkID)
 
-	// I2P networks use .b32.i2p addresses instead of host port mappings.
-	// Reject -p port mappings with a clear error to prevent user confusion.
-	// Service exposure should be done via --expose flag or i2p.expose.* labels.
-	log.Printf("Rejecting port mapping request: I2P networks do not support -p flag")
-	p.writeJSONResponse(w, ErrorResponse{
-		Err: "I2P networks do not support -p port mappings. Services are exposed via .b32.i2p addresses. Use --expose to expose container ports to the I2P network, or use i2p.expose.* labels for advanced configuration.",
-	})
+	// Extract port bindings from options
+	portBindingsRaw, hasPortBindings := req.Options["com.docker.network.portmap"]
+	if !hasPortBindings || portBindingsRaw == nil {
+		log.Printf("No port bindings found in external connectivity request")
+		p.writeJSONResponse(w, ErrorResponse{Err: ""})
+		return
+	}
+
+	// Parse port bindings
+	portBindingsList, ok := portBindingsRaw.([]interface{})
+	if !ok {
+		log.Printf("Invalid port bindings format: expected []interface{}, got %T", portBindingsRaw)
+		p.writeJSONResponse(w, ErrorResponse{Err: "invalid port bindings format"})
+		return
+	}
+
+	// Get network manager
+	network := p.networkMgr.GetNetwork(req.NetworkID)
+	if network == nil {
+		log.Printf("Failed to get network %s", req.NetworkID)
+		p.writeJSONResponse(w, ErrorResponse{Err: fmt.Sprintf("network %s not found", req.NetworkID)})
+		return
+	}
+
+	// Check if network allows IP exposure
+	if !network.ExposureConfig.AllowIPExposure {
+		log.Printf("Port mapping requested but network %s has allow_ip=false", req.NetworkID)
+		p.writeJSONResponse(w, ErrorResponse{
+			Err: "This I2P network does not allow IP exposure (allow_ip=false). Port mappings (-p) are not supported. Use --expose for I2P-only service exposure, or create a network with allow_ip=true to enable port forwarding.",
+		})
+		return
+	}
+
+	// Get endpoint
+	endpoint, ok := network.Endpoints[req.EndpointID]
+	if !ok {
+		log.Printf("Endpoint %s not found in network %s", req.EndpointID, req.NetworkID)
+		p.writeJSONResponse(w, ErrorResponse{Err: fmt.Sprintf("endpoint %s not found", req.EndpointID)})
+		return
+	}
+
+	// Create IP exposures for each port binding
+	log.Printf("Processing %d port binding(s) for endpoint %s", len(portBindingsList), req.EndpointID)
+
+	for i, bindingRaw := range portBindingsList {
+		bindingMap, ok := bindingRaw.(map[string]interface{})
+		if !ok {
+			log.Printf("Skipping invalid port binding at index %d: not a map", i)
+			continue
+		}
+
+		// Extract port binding fields
+		var containerPort int
+		var hostIP string
+		var hostPort int
+
+		// Parse container port (Port field)
+		if portVal, ok := bindingMap["Port"].(float64); ok {
+			containerPort = int(portVal)
+		} else {
+			log.Printf("Skipping port binding at index %d: missing or invalid Port field", i)
+			continue
+		}
+
+		// Parse host IP - check HostIP field first, default to 127.0.0.1
+		hostIP = "127.0.0.1"
+		if hostIPBytes, ok := bindingMap["HostIP"].([]interface{}); ok && len(hostIPBytes) >= 4 {
+			// Convert byte array to IP string
+			ipBytes := make([]byte, len(hostIPBytes))
+			for j, b := range hostIPBytes {
+				if bFloat, ok := b.(float64); ok {
+					ipBytes[j] = byte(bFloat)
+				}
+			}
+			parsedIP := net.IP(ipBytes)
+			if parsedIP != nil && !parsedIP.IsUnspecified() {
+				hostIP = parsedIP.String()
+			}
+		}
+
+		// Parse host port (HostPort field)
+		if hostPortVal, ok := bindingMap["HostPort"].(float64); ok {
+			hostPort = int(hostPortVal)
+		} else {
+			log.Printf("Skipping port binding at index %d: missing or invalid HostPort field", i)
+			continue
+		}
+
+		// Parse protocol (Proto field)
+		var protocol string = "tcp"
+		if protoVal, ok := bindingMap["Proto"].(float64); ok {
+			switch uint8(protoVal) {
+			case 6:
+				protocol = "tcp"
+			case 17:
+				protocol = "udp"
+			default:
+				log.Printf("Skipping port binding at index %d: unsupported protocol %d", i, uint8(protoVal))
+				continue
+			}
+		}
+
+		log.Printf("Port binding %d: %s:%d -> container:%d (protocol: %s)",
+			i, hostIP, hostPort, containerPort, protocol)
+
+		// Create ExposedPort for the port mapping
+		// Note: -p mappings can use different host/container ports (e.g., -p 8080:80)
+		exposedPort := service.ExposedPort{
+			ContainerPort: containerPort,
+			HostPort:      hostPort, // Host port may differ from container port
+			Protocol:      protocol,
+			ServiceName:   fmt.Sprintf("portmap-%d", hostPort),
+			ExposureType:  service.ExposureTypeIP,
+			TargetIP:      hostIP,
+		}
+
+		// Use service manager to create the IP exposure
+		exposures, err := p.networkMgr.ExposeServicesForEndpoint(
+			endpoint.ContainerID,
+			req.NetworkID,
+			endpoint.IPAddress,
+			[]service.ExposedPort{exposedPort},
+		)
+		if err != nil {
+			log.Printf("Failed to create IP exposure for port %d: %v", containerPort, err)
+			p.writeJSONResponse(w, ErrorResponse{
+				Err: fmt.Sprintf("failed to create port forwarding from %s:%d to container port %d: %v", hostIP, hostPort, containerPort, err),
+			})
+			return
+		}
+
+		log.Printf("Successfully created port mapping: %s:%d -> %s:%d (%s)",
+			hostIP, hostPort, endpoint.IPAddress.String(), containerPort, protocol)
+
+		// Store the exposures in the endpoint
+		if len(exposures) > 0 {
+			endpoint.ServiceExposures = append(endpoint.ServiceExposures, exposures[0])
+		}
+	}
+
+	log.Printf("Successfully programmed external connectivity for endpoint %s", req.EndpointID)
+	p.writeJSONResponse(w, ErrorResponse{Err: ""})
 }
 
 // handleRevokeExternalConnectivity removes external connectivity.

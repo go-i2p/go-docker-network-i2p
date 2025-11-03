@@ -927,3 +927,11 @@ func (nm *NetworkManager) Shutdown() error {
 	log.Printf("NetworkManager shutdown complete")
 	return nil
 }
+
+// ExposeServicesForEndpoint exposes services for a specific endpoint.
+//
+// This is a helper method to allow external callers (like ProgramExternalConnectivity)
+// to expose services without direct access to the service manager.
+func (nm *NetworkManager) ExposeServicesForEndpoint(containerID, networkID string, containerIP net.IP, ports []service.ExposedPort) ([]*service.ServiceExposure, error) {
+	return nm.serviceMgr.ExposeServices(containerID, networkID, containerIP, ports)
+}

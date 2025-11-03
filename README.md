@@ -52,15 +52,15 @@ docker run -d --name anonymous-web \
   --expose 80 \
   nginx:alpine
 
-# Get service .b32.i2p address from plugin logs
+# Get service .b32.i2p address (recommended: use docker inspect)
+docker inspect anonymous-web | jq -r '.NetworkSettings.Networks[].com.i2p.service.addresses'
+
+# Alternative: check plugin logs
 # If running plugin as system daemon (default installation):
 sudo journalctl -u i2p-network-plugin | grep "exposed as"
 
 # If running plugin as Docker container (via make docker-run):
 docker logs i2p-network-plugin 2>&1 | grep "exposed as"
-
-# Or inspect container network settings (always available):
-docker inspect anonymous-web | grep -A 10 "com.i2p.service.addresses"
 ```
 
 ## Documentation
@@ -70,6 +70,41 @@ docker inspect anonymous-web | grep -A 10 "com.i2p.service.addresses"
 🔧 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Diagnostic and troubleshooting guide  
 ⚠️ **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** - Current limitations and known issues  
 📦 **[DISTRIBUTION.md](DISTRIBUTION.md)** - Distribution and packaging guide  
+
+## Retrieving Service Addresses
+
+The plugin provides multiple ways to retrieve your container's I2P service addresses:
+
+### Method 1: Docker Inspect (Recommended)
+
+Use `docker inspect` to programmatically retrieve service addresses. This is the most reliable method for scripts and automation:
+
+```bash
+# Get all service addresses as JSON
+docker inspect <container-name> | jq '.NetworkSettings.Networks[].com.i2p.service.addresses'
+
+# Example output:
+# {
+#   "service-80": "abc123def456.b32.i2p"
+# }
+
+# Extract a specific service address
+docker inspect <container-name> | jq -r '.NetworkSettings.Networks[].com.i2p.service.addresses["service-80"]'
+```
+
+### Method 2: Plugin Logs
+
+Service addresses are also logged when containers start:
+
+```bash
+# For system daemon installations:
+sudo journalctl -u i2p-network-plugin | grep "exposed as"
+
+# For Docker container installations:
+docker logs i2p-network-plugin 2>&1 | grep "exposed as"
+```
+
+**Note**: Log-based retrieval is less reliable for automation as logs may rotate or be unavailable. Use `docker inspect` for scripts and programmatic access.
 
 ## Architecture
 
