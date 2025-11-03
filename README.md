@@ -7,12 +7,16 @@ A Docker network plugin that provides transparent I2P connectivity for container
 
 ✅ **Complete I2P Integration**: Transparent I2P connectivity for Docker containers  
 ✅ **Automatic Service Exposure**: Generate .b32.i2p addresses for container services (via `--expose`)  
+✅ **IP Exposure Support**: Optional localhost port forwarding via `-p` flag (when `allow_ip=true`)  
 ✅ **Traffic Filtering**: Block non-I2P traffic with allowlist/blocklist support  
 ✅ **Container Isolation**: Separate I2P identity per container for security  
-✅ **Docker Plugin API v2**: Full CNM compliance (uses .b32.i2p addresses instead of host port mappings)  
+✅ **Docker Plugin API v2**: Full CNM compliance with both I2P and IP exposure modes  
 🔄 **Beta - Near Production Ready**: Comprehensive testing and configuration options
 
-**Note**: I2P networks don't support `-p` port mappings (e.g., `-p 8080:80`) since services are exposed via .b32.i2p addresses, not host ports. Use `--expose` to expose container ports to the I2P network.  
+**Port Exposure Options**:
+- **I2P Exposure (default)**: Use `--expose` to create .b32.i2p addresses accessible over I2P network
+- **IP Exposure (optional)**: Use `-p` flag with networks created with `allow_ip=true` for localhost port forwarding (development/testing)
+- **Hybrid**: Combine both for services accessible via I2P and local debugging ports  
 
 ## Quick Start
 
@@ -184,22 +188,31 @@ docker run -d --name secure-api \
   my-secure-api:latest
 ```
 
-### Development Environment
+### Development Environment with IP Exposure
 
 ```bash
-# Create development network
+# Create development network with IP exposure enabled
 docker network create --driver=i2p \
+  --opt allow_ip=true \
   --opt i2p.filter.mode=disabled \
   --opt i2p.tunnels.inbound=1 \
   --opt i2p.tunnels.outbound=1 \
   dev-network
 
-# Fast startup for development
+# Run with both I2P exposure and localhost port forwarding
 docker run -d --name dev-app \
   --network dev-network \
+  --expose 8080 \
+  -p 8080:8080 \
   -v $(pwd):/workspace \
   node:alpine npm start
+
+# Service accessible via:
+# - I2P: <generated>.b32.i2p:8080 (from other I2P containers)
+# - Localhost: http://localhost:8080 (for local development/debugging)
 ```
+
+**Note on IP Exposure**: The `-p` flag creates localhost port forwarding for development/debugging. Traffic to `localhost:8080` is forwarded to the container's port 8080. This is NOT exposed to the network - it only binds to `127.0.0.1` for security.
 
 ## Building and Testing
 

@@ -263,13 +263,17 @@ docker run -d --name web-app \
   web-app:latest
 # Plugin detects PORT, HTTP_PORT, HTTPS_PORT variables
 
-# Method 3: Docker port mappings
+# Method 3: Docker port mappings (requires allow_ip=true)
+# Create network with IP exposure enabled
+docker network create --driver=i2p --opt allow_ip=true dev-net
+
 docker run -d --name api \
-  --network i2p-net \
+  --network dev-net \
   -p 8080:8080 \
   -p 8443:8443 \
   api-server:latest
-# Plugin creates server tunnels for mapped ports
+# Plugin creates localhost port forwarders for mapped ports
+# Accessible via: http://localhost:8080 and https://localhost:8443
 ```
 
 ### Manual Service Configuration
