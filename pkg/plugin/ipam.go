@@ -68,11 +68,15 @@ func (a *IPAllocator) AllocateIP() (net.IP, error) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	startIP := make(net.IP, len(a.nextIP))
-	copy(startIP, a.nextIP)
+	// Calculate maximum IPs in subnet to prevent infinite loop
+	ones, bits := a.subnet.Mask.Size()
+	maxIPs := 1 << (bits - ones)
+	
+	// Track attempts to detect when we've checked all IPs
+	attempts := 0
 
 	// Try to find an available IP starting from nextIP
-	for {
+	for attempts < maxIPs {
 		ipStr := a.nextIP.String()
 
 		// Check if this IP is available
@@ -92,13 +96,9 @@ func (a *IPAllocator) AllocateIP() (net.IP, error) {
 
 		// Move to next IP
 		a.incrementIP(a.nextIP)
+		attempts++
 
-		// Check if we've wrapped around to start (subnet exhausted)
-		if a.nextIP.Equal(startIP) {
-			return nil, fmt.Errorf("no available IP addresses in subnet %s", a.subnet)
-		}
-
-		// Check if we've gone outside the subnet (shouldn't happen with proper increment)
+		// Check if we've gone outside the subnet
 		if !a.subnet.Contains(a.nextIP) {
 			// Wrap to beginning of subnet
 			copy(a.nextIP, a.subnet.IP)
@@ -106,6 +106,9 @@ func (a *IPAllocator) AllocateIP() (net.IP, error) {
 			a.incrementIP(a.nextIP)
 		}
 	}
+	
+	// Exhausted all IPs in subnet
+	return nil, fmt.Errorf("no available IP addresses in subnet %s", a.subnet)
 }
 
 // AllocateSpecificIP allocates a specific IP address if available.
