@@ -553,6 +553,6 @@ docker run -d --name secure-db \
 
 - [USAGE.md](USAGE.md) - Usage examples and tutorials
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
-- [KNOWN_ISSUES.md](KNOWN_ISSUES.md) - Current limitations
+- [DISTRIBUTION.md](DISTRIBUTION.md) - Distribution and packaging guide
 - [Docker Network Plugin API](https://docs.docker.com/engine/extend/plugins_network/)
 - [I2P SAM Documentation](https://geti2p.net/en/docs/api/sam)

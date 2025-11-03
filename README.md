@@ -72,7 +72,6 @@ docker logs i2p-network-plugin 2>&1 | grep "exposed as"
 📖 **[USAGE.md](USAGE.md)** - Installation, configuration, and usage examples  
 ⚙️ **[CONFIG.md](CONFIG.md)** - Complete configuration reference  
 🔧 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Diagnostic and troubleshooting guide  
-⚠️ **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** - Current limitations and known issues  
 📦 **[DISTRIBUTION.md](DISTRIBUTION.md)** - Distribution and packaging guide  
 
 ## Retrieving Service Addresses
@@ -267,8 +266,7 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 
 ## Project Status
 
-🟢 **Phase 1-4: Complete** - All core functionality implemented  
-🔄 **Phase 5: In Progress** - Documentation and distribution  
+🟢 **Production Ready** - All core functionality and documentation complete  
 
 ### Completed Features
 
@@ -286,7 +284,7 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 We welcome contributions! Please see:
 
 - **Issues**: [GitHub Issues](https://github.com/go-i2p/go-docker-network-i2p/issues)
-- **Development**: Check GitHub Issues, Milestones, and [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for current development status
+- **Development**: Check GitHub Issues and Milestones for current development status
 - **Testing**: Run `make test` to verify changes
 - **Documentation**: Update relevant `.md` files for new features
 
@@ -303,6 +301,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Security Notice
 
-This software is in active development. While functional, please review the security considerations in [KNOWN_ISSUES.md](KNOWN_ISSUES.md) before production use.
+⚠️ **Important**: This software provides anonymity features, but proper security requires:
+- Verified I2P router configuration with SAM bridge enabled
+- Proper traffic filtering enabled (iptables required)
+- Review of [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for security best practices
+- Testing in development before production deployment
 
-⚠️ **Important**: Always verify your I2P router configuration and ensure proper traffic filtering for security-critical applications.
+Always verify your I2P router configuration and ensure proper traffic filtering for security-critical applications.

@@ -664,7 +664,8 @@ docker run -d --name anon-files \
 
 - See [CONFIG.md](CONFIG.md) for detailed configuration reference
 - See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for issue resolution
-- Check [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for current limitations and roadmap
+- Check [DISTRIBUTION.md](DISTRIBUTION.md) for packaging and distribution options
+- Review [GitHub Issues](https://github.com/go-i2p/go-docker-network-i2p/issues) for current development status
 
 ## Support
 

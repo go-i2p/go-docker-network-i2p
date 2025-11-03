@@ -655,6 +655,6 @@ When reporting issues, include:
 
 - [USAGE.md](USAGE.md) - Usage examples and tutorials
 - [CONFIG.md](CONFIG.md) - Configuration reference
-- [KNOWN_ISSUES.md](KNOWN_ISSUES.md) - Current limitations
+- [DISTRIBUTION.md](DISTRIBUTION.md) - Distribution and packaging guide
 - [Docker Network Troubleshooting](https://docs.docker.com/network/troubleshooting/)
 - [I2P Troubleshooting Guide](https://geti2p.net/en/docs/how/troubleshoot)
