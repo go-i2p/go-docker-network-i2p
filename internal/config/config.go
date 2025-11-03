@@ -6,6 +6,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -186,6 +187,180 @@ func (c *Config) LoadFromEnvironment() error {
 		if val, err := strconv.Atoi(idleTime); err == nil && val > 0 {
 			c.TunnelDefaults.CloseIdleTime = val
 		}
+	}
+
+	return nil
+}
+
+// LoadFromFile loads configuration from a JSON file.
+//
+// This method reads a JSON configuration file and merges it with the existing
+// configuration. Only fields present in the JSON file will override existing values.
+//
+// Configuration Precedence Order:
+//  1. Command-line flags (highest priority, applied in main.go)
+//  2. Environment variables (LoadFromEnvironment)
+//  3. Configuration file (this method)
+//  4. Default values (lowest priority, from DefaultConfig)
+//
+// Example usage:
+//
+//	cfg := DefaultConfig()
+//	if err := cfg.LoadFromFile("/etc/i2p-network/config.json"); err != nil {
+//	    return err
+//	}
+//	if err := cfg.LoadFromEnvironment(); err != nil {
+//	    return err
+//	}
+func (c *Config) LoadFromFile(filePath string) error {
+	if filePath == "" {
+		return fmt.Errorf("configuration file path cannot be empty")
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return fmt.Errorf("configuration file not found: %s", filePath)
+	}
+
+	// Read file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read configuration file %s: %w", filePath, err)
+	}
+
+	// Parse JSON
+	var fileConfig Config
+	if err := json.Unmarshal(data, &fileConfig); err != nil {
+		return fmt.Errorf("failed to parse configuration file %s: %w", filePath, err)
+	}
+
+	// Merge configuration - only override non-zero values from file
+	// This allows partial configuration files that only specify some fields
+
+	// Plugin configuration
+	if fileConfig.Plugin.SocketPath != "" {
+		c.Plugin.SocketPath = fileConfig.Plugin.SocketPath
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded PLUGIN_SOCKET_PATH from file: %s", fileConfig.Plugin.SocketPath)
+		}
+	}
+
+	// Debug flag is merged if explicitly set in file (even if false)
+	c.Plugin.Debug = fileConfig.Plugin.Debug
+	if c.Plugin.Debug {
+		log.Printf("DEBUG: Loaded DEBUG from file: %v", fileConfig.Plugin.Debug)
+	}
+
+	if fileConfig.Plugin.NetworkName != "" {
+		c.Plugin.NetworkName = fileConfig.Plugin.NetworkName
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded NETWORK_NAME from file: %s", fileConfig.Plugin.NetworkName)
+		}
+	}
+
+	if fileConfig.Plugin.IPAMSubnet != "" {
+		c.Plugin.IPAMSubnet = fileConfig.Plugin.IPAMSubnet
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded IPAM_SUBNET from file: %s", fileConfig.Plugin.IPAMSubnet)
+		}
+	}
+
+	if fileConfig.Plugin.Gateway != "" {
+		c.Plugin.Gateway = fileConfig.Plugin.Gateway
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded GATEWAY from file: %s", fileConfig.Plugin.Gateway)
+		}
+	}
+
+	// SAM configuration
+	if fileConfig.SAM.Host != "" {
+		c.SAM.Host = fileConfig.SAM.Host
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded I2P_SAM_HOST from file: %s", fileConfig.SAM.Host)
+		}
+	}
+
+	if fileConfig.SAM.Port > 0 {
+		c.SAM.Port = fileConfig.SAM.Port
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded I2P_SAM_PORT from file: %d", fileConfig.SAM.Port)
+		}
+	}
+
+	if fileConfig.SAM.Timeout > 0 {
+		c.SAM.Timeout = fileConfig.SAM.Timeout
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded I2P_SAM_TIMEOUT from file: %v", fileConfig.SAM.Timeout)
+		}
+	}
+
+	// Tunnel defaults
+	if fileConfig.TunnelDefaults.InboundTunnels > 0 {
+		c.TunnelDefaults.InboundTunnels = fileConfig.TunnelDefaults.InboundTunnels
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded InboundTunnels from file: %d", fileConfig.TunnelDefaults.InboundTunnels)
+		}
+	}
+
+	if fileConfig.TunnelDefaults.OutboundTunnels > 0 {
+		c.TunnelDefaults.OutboundTunnels = fileConfig.TunnelDefaults.OutboundTunnels
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded OutboundTunnels from file: %d", fileConfig.TunnelDefaults.OutboundTunnels)
+		}
+	}
+
+	if fileConfig.TunnelDefaults.InboundLength > 0 {
+		c.TunnelDefaults.InboundLength = fileConfig.TunnelDefaults.InboundLength
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded InboundLength from file: %d", fileConfig.TunnelDefaults.InboundLength)
+		}
+	}
+
+	if fileConfig.TunnelDefaults.OutboundLength > 0 {
+		c.TunnelDefaults.OutboundLength = fileConfig.TunnelDefaults.OutboundLength
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded OutboundLength from file: %d", fileConfig.TunnelDefaults.OutboundLength)
+		}
+	}
+
+	if fileConfig.TunnelDefaults.InboundBackups > 0 {
+		c.TunnelDefaults.InboundBackups = fileConfig.TunnelDefaults.InboundBackups
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded InboundBackups from file: %d", fileConfig.TunnelDefaults.InboundBackups)
+		}
+	}
+
+	if fileConfig.TunnelDefaults.OutboundBackups > 0 {
+		c.TunnelDefaults.OutboundBackups = fileConfig.TunnelDefaults.OutboundBackups
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded OutboundBackups from file: %d", fileConfig.TunnelDefaults.OutboundBackups)
+		}
+	}
+
+	// Boolean fields - only set if explicitly in file
+	if fileConfig.TunnelDefaults.EncryptLeaseset {
+		c.TunnelDefaults.EncryptLeaseset = fileConfig.TunnelDefaults.EncryptLeaseset
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded EncryptLeaseset from file: %v", fileConfig.TunnelDefaults.EncryptLeaseset)
+		}
+	}
+
+	if fileConfig.TunnelDefaults.CloseIdle {
+		c.TunnelDefaults.CloseIdle = fileConfig.TunnelDefaults.CloseIdle
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded CloseIdle from file: %v", fileConfig.TunnelDefaults.CloseIdle)
+		}
+	}
+
+	if fileConfig.TunnelDefaults.CloseIdleTime > 0 {
+		c.TunnelDefaults.CloseIdleTime = fileConfig.TunnelDefaults.CloseIdleTime
+		if c.Plugin.Debug {
+			log.Printf("DEBUG: Loaded CloseIdleTime from file: %d", fileConfig.TunnelDefaults.CloseIdleTime)
+		}
+	}
+
+	if c.Plugin.Debug {
+		log.Printf("DEBUG: Successfully loaded configuration from file: %s", filePath)
 	}
 
 	return nil
