@@ -512,6 +512,11 @@ func (tm *TunnelManager) GetOrCreateContainerSession(containerID string) (*sam3.
 		return nil, fmt.Errorf("failed to connect SAM client for container %s: %w", containerID, err)
 	}
 
+	// Verify SAM connection was established (defensive check)
+	if !samClient.IsConnected() {
+		return nil, fmt.Errorf("SAM client for container %s connected but sam field is nil", containerID)
+	}
+
 	// Generate a unique session ID for this container
 	sessionID := fmt.Sprintf("cont_%s_%d", containerID, time.Now().UnixNano())
 
