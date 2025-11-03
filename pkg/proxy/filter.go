@@ -102,9 +102,11 @@ func NewTrafficFilter(config *FilterConfig) *TrafficFilter {
 	}
 
 	return &TrafficFilter{
-		config:    config,
-		allowlist: make(map[string]bool),
-		blocklist: make(map[string]bool),
+		config:         config,
+		allowlist:      make(map[string]bool),
+		blocklist:      make(map[string]bool),
+		allowlistRegex: make(map[string]*regexp.Regexp),
+		blocklistRegex: make(map[string]*regexp.Regexp),
 		stats: &TrafficStats{
 			LogEntries: make([]TrafficLogEntry, 0, config.MaxLogEntries),
 		},
@@ -156,7 +158,17 @@ func (tf *TrafficFilter) AddToAllowlist(destination string) error {
 	tf.mutex.Lock()
 	defer tf.mutex.Unlock()
 
-	tf.allowlist[strings.ToLower(destination)] = true
+	destLower := strings.ToLower(destination)
+	tf.allowlist[destLower] = true
+
+	// Pre-compile regex pattern if this is a wildcard pattern
+	if strings.Contains(destination, "*") {
+		if regex, err := tf.compileWildcardPattern(destination); err == nil {
+			tf.allowlistRegex[destLower] = regex
+		} else {
+			log.Printf("Warning: Failed to compile wildcard pattern %s: %v", destination, err)
+		}
+	}
 
 	if tf.config.LogTraffic {
 		log.Printf("Added destination to allowlist: %s", destination)
@@ -182,7 +194,17 @@ func (tf *TrafficFilter) AddToBlocklist(destination string) error {
 	tf.mutex.Lock()
 	defer tf.mutex.Unlock()
 
-	tf.blocklist[strings.ToLower(destination)] = true
+	destLower := strings.ToLower(destination)
+	tf.blocklist[destLower] = true
+
+	// Pre-compile regex pattern if this is a wildcard pattern
+	if strings.Contains(destination, "*") {
+		if regex, err := tf.compileWildcardPattern(destination); err == nil {
+			tf.blocklistRegex[destLower] = regex
+		} else {
+			log.Printf("Warning: Failed to compile wildcard pattern %s: %v", destination, err)
+		}
+	}
 
 	if tf.config.LogTraffic {
 		log.Printf("Added destination to blocklist: %s", destination)
@@ -196,7 +218,9 @@ func (tf *TrafficFilter) RemoveFromAllowlist(destination string) {
 	tf.mutex.Lock()
 	defer tf.mutex.Unlock()
 
-	delete(tf.allowlist, strings.ToLower(destination))
+	destLower := strings.ToLower(destination)
+	delete(tf.allowlist, destLower)
+	delete(tf.allowlistRegex, destLower) // Also remove cached regex if exists
 
 	if tf.config.LogTraffic {
 		log.Printf("Removed destination from allowlist: %s", destination)
@@ -208,7 +232,9 @@ func (tf *TrafficFilter) RemoveFromBlocklist(destination string) {
 	tf.mutex.Lock()
 	defer tf.mutex.Unlock()
 
-	delete(tf.blocklist, strings.ToLower(destination))
+	destLower := strings.ToLower(destination)
+	delete(tf.blocklist, destLower)
+	delete(tf.blocklistRegex, destLower) // Also remove cached regex if exists
 
 	if tf.config.LogTraffic {
 		log.Printf("Removed destination from blocklist: %s", destination)
@@ -244,7 +270,7 @@ func (tf *TrafficFilter) ShouldAllowConnection(destination string, protocol stri
 
 	// Check allowlist first (takes precedence)
 	if tf.config.EnableAllowlist {
-		if allowed := tf.matchesPattern(host, tf.allowlist); allowed {
+		if allowed := tf.matchesPattern(host, tf.allowlist, tf.allowlistRegex); allowed {
 			reason := fmt.Sprintf("I2P destination allowed by allowlist: %s", host)
 			tf.logTrafficEvent("ALLOW", protocol, "", dest, reason, 0)
 			tf.incrementStat(func() { tf.stats.I2PConnectionsAllowed++ })
@@ -259,7 +285,7 @@ func (tf *TrafficFilter) ShouldAllowConnection(destination string, protocol stri
 
 	// Check blocklist
 	if tf.config.EnableBlocklist {
-		if blocked := tf.matchesPattern(host, tf.blocklist); blocked {
+		if blocked := tf.matchesPattern(host, tf.blocklist, tf.blocklistRegex); blocked {
 			reason := fmt.Sprintf("I2P destination blocked by blocklist: %s", host)
 			tf.logTrafficEvent("BLOCK", protocol, "", dest, reason, 0)
 			tf.incrementStat(func() { tf.stats.I2PConnectionsBlocked++ })
@@ -420,15 +446,25 @@ func (tf *TrafficFilter) isI2PDestination(destination string) bool {
 }
 
 // matchesPattern checks if a destination matches any pattern in the given map.
-func (tf *TrafficFilter) matchesPattern(destination string, patterns map[string]bool) bool {
+// compileWildcardPattern converts a wildcard pattern to a compiled regex.
+func (tf *TrafficFilter) compileWildcardPattern(pattern string) (*regexp.Regexp, error) {
+	// Convert wildcard pattern to regex
+	regexPattern := strings.ReplaceAll(regexp.QuoteMeta(pattern), "\\*", ".*")
+	regexPattern = "^" + regexPattern + "$"
+	return regexp.Compile(regexPattern)
+}
+
+// matchesPattern checks if a destination matches any pattern in the map.
+// This optimized version uses pre-compiled regex patterns from the cache.
+func (tf *TrafficFilter) matchesPattern(destination string, patterns map[string]bool, regexCache map[string]*regexp.Regexp) bool {
 	// Check for exact match first
 	if patterns[destination] {
 		return true
 	}
 
-	// Check wildcard patterns
+	// Check wildcard patterns using cached compiled regexes
 	for pattern := range patterns {
-		if tf.matchesWildcard(destination, pattern) {
+		if tf.matchesWildcardCached(destination, pattern, regexCache) {
 			return true
 		}
 	}
@@ -436,23 +472,25 @@ func (tf *TrafficFilter) matchesPattern(destination string, patterns map[string]
 	return false
 }
 
-// matchesWildcard checks if a destination matches a wildcard pattern.
-func (tf *TrafficFilter) matchesWildcard(destination, pattern string) bool {
-	// Simple wildcard matching: * matches any sequence of characters
+// matchesWildcardCached checks if a destination matches a wildcard pattern using cached regex.
+func (tf *TrafficFilter) matchesWildcardCached(destination, pattern string, regexCache map[string]*regexp.Regexp) bool {
+	// Simple exact match if no wildcard
 	if !strings.Contains(pattern, "*") {
 		return destination == pattern
 	}
 
-	// Convert wildcard pattern to regex
-	regexPattern := strings.ReplaceAll(regexp.QuoteMeta(pattern), "\\*", ".*")
-	regexPattern = "^" + regexPattern + "$"
+	// Use cached compiled regex if available
+	if regex, exists := regexCache[pattern]; exists && regex != nil {
+		return regex.MatchString(destination)
+	}
 
-	matched, err := regexp.MatchString(regexPattern, destination)
+	// Fallback: compile on-the-fly if not cached (shouldn't happen in normal operation)
+	regex, err := tf.compileWildcardPattern(pattern)
 	if err != nil {
 		return false
 	}
 
-	return matched
+	return regex.MatchString(destination)
 }
 
 // logTrafficEvent adds a traffic event to the log.
