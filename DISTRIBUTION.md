@@ -200,7 +200,6 @@ Before creating a release:
 - [ ] Code is properly formatted (`make fmt`)
 - [ ] No linter warnings (`make lint`)
 - [ ] Documentation is up-to-date
-- [ ] CHANGELOG is updated (if exists)
 - [ ] Version tag is created
 - [ ] Docker image builds successfully
 - [ ] Release artifacts are created
