@@ -234,7 +234,7 @@ func (tf *TrafficFilter) ShouldAllowConnection(destination string, protocol stri
 		// Non-I2P traffic is always blocked
 		reason := fmt.Sprintf("Non-I2P destination blocked: %s", host)
 		tf.logTrafficEvent("BLOCK", protocol, "", dest, reason, 0)
-		tf.stats.NonI2PConnectionsBlocked++
+		tf.incrementStat(func() { tf.stats.NonI2PConnectionsBlocked++ })
 		return false, reason
 	}
 
@@ -243,13 +243,13 @@ func (tf *TrafficFilter) ShouldAllowConnection(destination string, protocol stri
 		if allowed := tf.matchesPattern(host, tf.allowlist); allowed {
 			reason := fmt.Sprintf("I2P destination allowed by allowlist: %s", host)
 			tf.logTrafficEvent("ALLOW", protocol, "", dest, reason, 0)
-			tf.stats.I2PConnectionsAllowed++
+			tf.incrementStat(func() { tf.stats.I2PConnectionsAllowed++ })
 			return true, reason
 		}
 		// If allowlist is enabled but destination not found, block it
 		reason := fmt.Sprintf("I2P destination not in allowlist: %s", host)
 		tf.logTrafficEvent("BLOCK", protocol, "", dest, reason, 0)
-		tf.stats.I2PConnectionsBlocked++
+		tf.incrementStat(func() { tf.stats.I2PConnectionsBlocked++ })
 		return false, reason
 	}
 
@@ -258,7 +258,7 @@ func (tf *TrafficFilter) ShouldAllowConnection(destination string, protocol stri
 		if blocked := tf.matchesPattern(host, tf.blocklist); blocked {
 			reason := fmt.Sprintf("I2P destination blocked by blocklist: %s", host)
 			tf.logTrafficEvent("BLOCK", protocol, "", dest, reason, 0)
-			tf.stats.I2PConnectionsBlocked++
+			tf.incrementStat(func() { tf.stats.I2PConnectionsBlocked++ })
 			return false, reason
 		}
 	}
@@ -266,7 +266,7 @@ func (tf *TrafficFilter) ShouldAllowConnection(destination string, protocol stri
 	// Default: allow I2P traffic if not explicitly blocked
 	reason := fmt.Sprintf("I2P destination allowed: %s", host)
 	tf.logTrafficEvent("ALLOW", protocol, "", dest, reason, 0)
-	tf.stats.I2PConnectionsAllowed++
+	tf.incrementStat(func() { tf.stats.I2PConnectionsAllowed++ })
 	return true, reason
 }
 
@@ -278,8 +278,11 @@ func (tf *TrafficFilter) LogConnection(source, destination string, protocol stri
 	tf.mutex.Lock()
 	defer tf.mutex.Unlock()
 
-	tf.stats.TotalBytesTransferred += bytesTransferred
-	tf.stats.LastActivity = time.Now()
+	// Update stats with proper mutex protection to prevent data races
+	tf.incrementStat(func() {
+		tf.stats.TotalBytesTransferred += bytesTransferred
+		tf.stats.LastActivity = time.Now()
+	})
 
 	reason := fmt.Sprintf("Connection completed, %d bytes transferred", bytesTransferred)
 	tf.logTrafficEvent("LOG", protocol, source, destination, reason, bytesTransferred)
@@ -478,4 +481,12 @@ func (tf *TrafficFilter) logTrafficEvent(action, protocol, source, destination, 
 
 	// Log to system logger
 	log.Printf("TRAFFIC %s: %s %s -> %s (%s)", action, protocol, source, destination, reason)
+}
+
+// incrementStat safely increments a statistic counter with proper mutex protection.
+// This helper prevents data races when updating stats from methods that hold tf.mutex.
+func (tf *TrafficFilter) incrementStat(incrementFunc func()) {
+	tf.stats.mutex.Lock()
+	incrementFunc()
+	tf.stats.mutex.Unlock()
 }
