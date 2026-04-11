@@ -148,6 +148,7 @@ func TestRequestParsing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
+	plugin.SetIptablesChecker(&noopIptablesChecker{})
 
 	tests := []struct {
 		name           string
@@ -222,6 +223,7 @@ func TestErrorHandling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
+	plugin.SetIptablesChecker(&noopIptablesChecker{})
 
 	// Test with empty body
 	req := httptest.NewRequest("POST", "/", nil)
@@ -246,6 +248,7 @@ func TestEndpointLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
+	plugin.SetIptablesChecker(&noopIptablesChecker{})
 
 	// First create a network
 	networkID := "test-endpoint-lifecycle-network"
@@ -490,6 +493,7 @@ func TestEndpointDuplicateCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
+	plugin.SetIptablesChecker(&noopIptablesChecker{})
 
 	// Create a network first
 	networkID := "test-duplicate-network"
@@ -562,6 +566,7 @@ func TestMultipleEndpointsOnNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
+	plugin.SetIptablesChecker(&noopIptablesChecker{})
 
 	// Create a network
 	networkID := "test-multiple-endpoints-network"

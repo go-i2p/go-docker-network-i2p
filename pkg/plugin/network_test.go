@@ -20,14 +20,7 @@ func (n *noopIptablesChecker) IsAvailable() error { return nil }
 
 // TestNetworkManager_CreateNetwork tests network creation functionality.
 func TestNetworkManager_CreateNetwork(t *testing.T) {
-	// Create a mock tunnel manager for testing
-	tunnelMgr := createMockTunnelManager(t)
-
-	// Create network manager
-	nm, err := NewNetworkManager(tunnelMgr)
-	if err != nil {
-		t.Fatalf("Failed to create network manager: %v", err)
-	}
+	nm := createTestNetworkManager(t)
 
 	tests := []struct {
 		name        string
@@ -127,14 +120,7 @@ func TestNetworkManager_CreateNetwork(t *testing.T) {
 
 // TestNetworkManager_DeleteNetwork tests network deletion functionality.
 func TestNetworkManager_DeleteNetwork(t *testing.T) {
-	// Create a mock tunnel manager for testing
-	tunnelMgr := createMockTunnelManager(t)
-
-	// Create network manager
-	nm, err := NewNetworkManager(tunnelMgr)
-	if err != nil {
-		t.Fatalf("Failed to create network manager: %v", err)
-	}
+	nm := createTestNetworkManager(t)
 
 	// Create test networks
 	testNetworks := []string{"delete-test-1", "delete-test-2"}
@@ -207,14 +193,7 @@ func TestNetworkManager_DeleteNetwork(t *testing.T) {
 
 // TestNetworkManager_GetNetwork tests network retrieval functionality.
 func TestNetworkManager_GetNetwork(t *testing.T) {
-	// Create a mock tunnel manager for testing
-	tunnelMgr := createMockTunnelManager(t)
-
-	// Create network manager
-	nm, err := NewNetworkManager(tunnelMgr)
-	if err != nil {
-		t.Fatalf("Failed to create network manager: %v", err)
-	}
+	nm := createTestNetworkManager(t)
 
 	// Create a test network
 	networkID := "get-test-network"
@@ -273,14 +252,7 @@ func TestNetworkManager_GetNetwork(t *testing.T) {
 
 // TestNetworkManager_ListNetworks tests network listing functionality.
 func TestNetworkManager_ListNetworks(t *testing.T) {
-	// Create a mock tunnel manager for testing
-	tunnelMgr := createMockTunnelManager(t)
-
-	// Create network manager
-	nm, err := NewNetworkManager(tunnelMgr)
-	if err != nil {
-		t.Fatalf("Failed to create network manager: %v", err)
-	}
+	nm := createTestNetworkManager(t)
 
 	// Test with empty manager
 	networks := nm.ListNetworks()
@@ -324,12 +296,7 @@ func TestNetworkManager_ListNetworks(t *testing.T) {
 
 // TestI2PNetwork_BasicOperations tests basic network operations.
 func TestI2PNetwork_BasicOperations(t *testing.T) {
-	// Create mock tunnel manager and network manager
-	tunnelMgr := createMockTunnelManager(t)
-	nm, err := NewNetworkManager(tunnelMgr)
-	if err != nil {
-		t.Fatalf("Failed to create network manager: %v", err)
-	}
+	nm := createTestNetworkManager(t)
 
 	// Create test network
 	networkID := "basic-ops-test"
@@ -460,6 +427,18 @@ func createMockTunnelManager(t *testing.T) *i2p.TunnelManager {
 	}
 
 	return i2p.NewTunnelManager(samClient)
+}
+
+// createTestNetworkManager creates a NetworkManager with iptables checks disabled,
+// suitable for unit testing environments where iptables is not available.
+func createTestNetworkManager(t *testing.T) *NetworkManager {
+	tunnelMgr := createMockTunnelManager(t)
+	nm, err := NewNetworkManager(tunnelMgr)
+	if err != nil {
+		t.Fatalf("Failed to create network manager: %v", err)
+	}
+	nm.SetIptablesChecker(&noopIptablesChecker{})
+	return nm
 }
 
 // TestParseNetworkExposureConfig tests network exposure configuration parsing.
@@ -611,11 +590,7 @@ func TestParseNetworkExposureConfig(t *testing.T) {
 
 // TestNetworkCreationWithExposureConfig tests that networks are created with proper exposure configuration.
 func TestNetworkCreationWithExposureConfig(t *testing.T) {
-	tunnelMgr := createMockTunnelManager(t)
-	nm, err := NewNetworkManager(tunnelMgr)
-	if err != nil {
-		t.Fatalf("Failed to create network manager: %v", err)
-	}
+	nm := createTestNetworkManager(t)
 
 	tests := []struct {
 		name                    string

@@ -15,6 +15,7 @@ import (
 	"os"
 
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
+	"github.com/go-i2p/go-docker-network-i2p/pkg/proxy"
 )
 
 // Plugin represents the I2P Docker network plugin.
@@ -55,6 +56,12 @@ func New(sockPath string, samConfig *i2p.SAMConfig) (*Plugin, error) {
 		sockPath:   sockPath,
 		networkMgr: networkMgr,
 	}, nil
+}
+
+// SetIptablesChecker overrides the default iptables availability checker.
+// This is primarily useful for testing in environments without iptables.
+func (p *Plugin) SetIptablesChecker(checker proxy.IptablesChecker) {
+	p.networkMgr.SetIptablesChecker(checker)
 }
 
 // Start begins the plugin operation, listening for Docker daemon requests.

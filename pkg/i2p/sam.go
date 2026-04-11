@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"time"
 
 	sam3 "github.com/go-i2p/go-sam-go"
@@ -145,13 +144,6 @@ func validateSAMConfig(config *SAMConfig) error {
 	if config.Timeout <= 0 {
 		return fmt.Errorf("timeout must be positive, got %v", config.Timeout)
 	}
-
-	// Validate that the host is reachable (basic check)
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port), config.Timeout)
-	if err != nil {
-		return fmt.Errorf("cannot reach SAM bridge at %s:%d: %w", config.Host, config.Port, err)
-	}
-	conn.Close()
 
 	return nil
 }

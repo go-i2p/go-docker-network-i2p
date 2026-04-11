@@ -40,7 +40,7 @@ func TestNewSAMClient(t *testing.T) {
 				Port:    65433, // Use an unlikely port
 				Timeout: 1 * time.Second,
 			},
-			wantErr: true, // Will fail because nothing is running on this port
+			wantErr: false, // Config fields are valid; connection failure deferred to Connect()
 		},
 		{
 			name: "unreachable port on 127.0.0.1",
@@ -49,7 +49,7 @@ func TestNewSAMClient(t *testing.T) {
 				Port:    65432, // Use an unlikely port
 				Timeout: 1 * time.Second,
 			},
-			wantErr: true,
+			wantErr: false, // Config fields are valid; connection failure deferred to Connect()
 		},
 		{
 			name: "invalid port",
@@ -115,26 +115,23 @@ func TestSAMClientConnectionLifecycle(t *testing.T) {
 	}
 
 	client, err := NewSAMClient(config)
-	if err == nil {
-		t.Fatal("Expected error when creating client with unreachable host")
+	if err != nil {
+		t.Fatalf("Unexpected error creating client with unreachable host: %v", err)
 	}
 
-	// Test lifecycle methods on nil client
-	if client != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
+	// Connection should fail because the host is unreachable
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
-		// This should fail because the host is unreachable
-		err = client.Connect(ctx)
-		if err == nil {
-			t.Error("Expected connection error for unreachable host")
-		}
+	err = client.Connect(ctx)
+	if err == nil {
+		t.Error("Expected connection error for unreachable host")
+	}
 
-		// Test disconnect (should not panic even if not connected)
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect() returned unexpected error: %v", err)
-		}
+	// Test disconnect (should not panic even if not connected)
+	err = client.Disconnect()
+	if err != nil {
+		t.Errorf("Disconnect() returned unexpected error: %v", err)
 	}
 }
 
