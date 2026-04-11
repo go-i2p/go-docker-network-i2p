@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
 	"github.com/go-i2p/go-forward/config"
 	"github.com/go-i2p/go-forward/packet"
@@ -826,22 +827,27 @@ func (sem *ServiceExposureManager) createServiceExposure(containerID string, net
 
 // generateB32Address generates a .b32.i2p address from an I2P destination.
 //
-// I2P destinations are base64-encoded, but .b32.i2p addresses use base32 encoding
-// with a specific format. This method converts the destination appropriately.
+// I2P .b32.i2p addresses are derived by SHA-256 hashing the raw destination
+// bytes (decoded from base64), then base32-encoding all 32 hash bytes to
+// produce a 52-character address per the I2P specification.
 func (sem *ServiceExposureManager) generateB32Address(destination string) (string, error) {
 	if destination == "" {
 		return "", fmt.Errorf("destination cannot be empty")
 	}
 
-	// Hash the destination to generate a consistent shorter address
-	// In a real I2P implementation, this would use the actual destination key
-	// For now, we'll create a deterministic hash-based address
-	hash := sha256.Sum256([]byte(destination))
+	// Decode the I2P base64 destination to raw bytes
+	destBytes, err := i2pbase64.DecodeString(destination)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode destination: %w", err)
+	}
 
-	// Take first 20 bytes for base32 encoding (similar to I2P's approach)
-	b32 := base32.StdEncoding.EncodeToString(hash[:20])
+	// SHA-256 hash the raw destination bytes
+	hash := sha256.Sum256(destBytes)
 
-	// Convert to lowercase and remove padding
+	// Base32-encode all 32 bytes of the hash
+	b32 := base32.StdEncoding.EncodeToString(hash[:])
+
+	// Convert to lowercase and remove padding for I2P format
 	b32 = strings.ToLower(strings.TrimRight(b32, "="))
 
 	return fmt.Sprintf("%s.b32.i2p", b32), nil

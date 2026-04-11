@@ -29,14 +29,15 @@ type Plugin struct {
 //
 // The sockPath parameter specifies the Unix socket path where the plugin
 // will listen for Docker daemon requests. This follows Docker's plugin
-// discovery mechanism.
-func New(sockPath string) (*Plugin, error) {
+// discovery mechanism. The optional samConfig parameter allows passing
+// SAM bridge configuration; if nil, DefaultSAMConfig() is used.
+func New(sockPath string, samConfig *i2p.SAMConfig) (*Plugin, error) {
 	if sockPath == "" {
 		return nil, fmt.Errorf("socket path cannot be empty")
 	}
 
 	// Create SAM client for I2P connectivity
-	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
+	samClient, err := i2p.NewSAMClient(samConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SAM client: %w", err)
 	}

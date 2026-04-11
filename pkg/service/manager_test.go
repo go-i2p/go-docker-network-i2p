@@ -358,7 +358,7 @@ func TestGenerateB32Address(t *testing.T) {
 	}{
 		{
 			name:        "valid destination",
-			destination: "test-destination-string",
+			destination: "SGVsbG8gV29ybGQhIFRoaXMgaXMgYSB0ZXN0IGRlc3RpbmF0aW9uIGZvciBJMlAh",
 			shouldError: false,
 		},
 		{
@@ -385,6 +385,12 @@ func TestGenerateB32Address(t *testing.T) {
 				}
 				if !strings.HasSuffix(address, ".b32.i2p") {
 					t.Errorf("Expected address to end with .b32.i2p, got: %s", address)
+				}
+
+				// Verify .b32.i2p address has correct 52-char hash per I2P spec
+				b32Part := strings.TrimSuffix(address, ".b32.i2p")
+				if len(b32Part) != 52 {
+					t.Errorf("Expected 52-character base32 hash, got %d characters: %s", len(b32Part), b32Part)
 				}
 
 				// Test that same destination generates same address
@@ -571,7 +577,7 @@ func BenchmarkGenerateB32Address(b *testing.B) {
 		b.Fatalf("Failed to create service exposure manager: %v", err)
 	}
 
-	destination := "test-destination-for-benchmarking"
+	destination := "SGVsbG8gV29ybGQhIFRoaXMgaXMgYSB0ZXN0IGRlc3RpbmF0aW9uIGZvciBJMlAh"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

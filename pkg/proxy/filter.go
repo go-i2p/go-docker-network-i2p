@@ -77,6 +77,16 @@ type TrafficStats struct {
 	mutex sync.RWMutex
 }
 
+// TrafficStatsSnapshot is a copy of TrafficStats without the mutex, safe for returning by value.
+type TrafficStatsSnapshot struct {
+	I2PConnectionsAllowed    int64
+	I2PConnectionsBlocked    int64
+	NonI2PConnectionsBlocked int64
+	TotalBytesTransferred    int64
+	LastActivity             time.Time
+	LogEntries               []TrafficLogEntry
+}
+
 // TrafficLogEntry represents a single traffic event.
 type TrafficLogEntry struct {
 	// Timestamp when the event occurred
@@ -318,13 +328,12 @@ func (tf *TrafficFilter) LogConnection(source, destination string, protocol stri
 	tf.logTrafficEvent("LOG", protocol, source, destination, reason, bytesTransferred)
 }
 
-// GetStats returns a copy of current traffic statistics.
-func (tf *TrafficFilter) GetStats() TrafficStats {
+// GetStats returns a snapshot of current traffic statistics.
+func (tf *TrafficFilter) GetStats() TrafficStatsSnapshot {
 	tf.stats.mutex.RLock()
 	defer tf.stats.mutex.RUnlock()
 
-	// Create a deep copy of stats
-	statsCopy := TrafficStats{
+	snapshot := TrafficStatsSnapshot{
 		I2PConnectionsAllowed:    tf.stats.I2PConnectionsAllowed,
 		I2PConnectionsBlocked:    tf.stats.I2PConnectionsBlocked,
 		NonI2PConnectionsBlocked: tf.stats.NonI2PConnectionsBlocked,
@@ -333,8 +342,8 @@ func (tf *TrafficFilter) GetStats() TrafficStats {
 		LogEntries:               make([]TrafficLogEntry, len(tf.stats.LogEntries)),
 	}
 
-	copy(statsCopy.LogEntries, tf.stats.LogEntries)
-	return statsCopy
+	copy(snapshot.LogEntries, tf.stats.LogEntries)
+	return snapshot
 }
 
 // GetRecentLogs returns recent traffic log entries.

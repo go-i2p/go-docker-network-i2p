@@ -9,6 +9,11 @@ import (
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
 )
 
+// IptablesChecker verifies iptables availability.
+type IptablesChecker interface {
+	IsAvailable() error
+}
+
 // ProxyManager coordinates transparent I2P proxying for Docker networks.
 //
 // The ProxyManager integrates traffic interception, SOCKS proxying, and DNS
@@ -16,6 +21,8 @@ import (
 type ProxyManager struct {
 	// interceptor manages iptables rules for traffic interception
 	interceptor *TrafficInterceptor
+	// iptablesChecker verifies iptables availability (defaults to interceptor)
+	iptablesChecker IptablesChecker
 	// socksProxy handles SOCKS5 connections and I2P routing
 	socksProxy *SOCKSProxy
 	// dnsResolver provides DNS resolution for I2P domains
@@ -75,14 +82,15 @@ func NewProxyManager(config *ProxyConfig, tunnelManager *i2p.TunnelManager) *Pro
 	dnsResolver := NewI2PDNSResolver(config.DNSBindAddr)
 
 	return &ProxyManager{
-		interceptor:   interceptor,
-		socksProxy:    socksProxy,
-		dnsResolver:   dnsResolver,
-		trafficFilter: trafficFilter,
-		tunnelManager: tunnelManager,
-		config:        config,
-		ctx:           ctx,
-		cancel:        cancel,
+		interceptor:     interceptor,
+		iptablesChecker: interceptor,
+		socksProxy:      socksProxy,
+		dnsResolver:     dnsResolver,
+		trafficFilter:   trafficFilter,
+		tunnelManager:   tunnelManager,
+		config:          config,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 }
 
@@ -173,7 +181,13 @@ func (pm *ProxyManager) IsRunning() bool {
 // requirement that iptables must be available for traffic filtering.
 // Returns an error if iptables is not available or cannot be used.
 func (pm *ProxyManager) CheckIptablesAvailability() error {
-	return pm.interceptor.IsAvailable()
+	return pm.iptablesChecker.IsAvailable()
+}
+
+// SetIptablesChecker overrides the default iptables checker.
+// This is primarily useful for testing.
+func (pm *ProxyManager) SetIptablesChecker(checker IptablesChecker) {
+	pm.iptablesChecker = checker
 }
 
 // GetConfig returns the current proxy configuration.
@@ -225,7 +239,7 @@ func (pm *ProxyManager) RemoveFromBlocklist(destination string) {
 }
 
 // GetTrafficStats returns current traffic statistics.
-func (pm *ProxyManager) GetTrafficStats() TrafficStats {
+func (pm *ProxyManager) GetTrafficStats() TrafficStatsSnapshot {
 	return pm.trafficFilter.GetStats()
 }
 

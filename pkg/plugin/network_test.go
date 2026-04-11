@@ -12,6 +12,12 @@ import (
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
 )
 
+// noopIptablesChecker satisfies proxy.IptablesChecker for testing environments
+// where iptables is not available.
+type noopIptablesChecker struct{}
+
+func (n *noopIptablesChecker) IsAvailable() error { return nil }
+
 // TestNetworkManager_CreateNetwork tests network creation functionality.
 func TestNetworkManager_CreateNetwork(t *testing.T) {
 	// Create a mock tunnel manager for testing
@@ -558,6 +564,31 @@ func TestParseNetworkExposureConfig(t *testing.T) {
 			},
 			expectedDefaultType:     "i2p",
 			expectedAllowIPExposure: true,
+		},
+		{
+			name: "short-form allow_ip key with 'false'",
+			options: map[string]interface{}{
+				"allow_ip": "false",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: false,
+		},
+		{
+			name: "short-form allow_ip key with 'true'",
+			options: map[string]interface{}{
+				"allow_ip": "true",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: true,
+		},
+		{
+			name: "long-form takes precedence over short-form",
+			options: map[string]interface{}{
+				"i2p.exposure.allow_ip": "false",
+				"allow_ip":              "true",
+			},
+			expectedDefaultType:     "i2p",
+			expectedAllowIPExposure: false,
 		},
 	}
 

@@ -143,6 +143,12 @@ func NewNetworkManager(tunnelMgr *i2p.TunnelManager) (*NetworkManager, error) {
 	}, nil
 }
 
+// SetIptablesChecker overrides the default iptables availability checker.
+// This is primarily useful for testing.
+func (nm *NetworkManager) SetIptablesChecker(checker proxy.IptablesChecker) {
+	nm.proxyMgr.SetIptablesChecker(checker)
+}
+
 // CreateNetwork creates a new I2P network.
 //
 // This method implements Docker's CreateNetwork operation, setting up the
@@ -784,12 +790,16 @@ func parseNetworkExposureConfig(options map[string]interface{}) service.NetworkE
 		}
 	}
 
-	// Check for IP exposure permission setting
+	// Check for IP exposure permission setting (support both long and short form)
 	if allowIP, ok := options["i2p.exposure.allow_ip"]; ok {
 		if allow, ok := allowIP.(string); ok {
-			// Parse boolean-like strings
 			config.AllowIPExposure = (allow == "true" || allow == "1" || allow == "yes")
 			log.Printf("Network IP exposure allowed: %v", config.AllowIPExposure)
+		}
+	} else if allowIP, ok := options["allow_ip"]; ok {
+		if allow, ok := allowIP.(string); ok {
+			config.AllowIPExposure = (allow == "true" || allow == "1" || allow == "yes")
+			log.Printf("Network IP exposure allowed: %v (short-form key)", config.AllowIPExposure)
 		}
 	}
 

@@ -3,14 +3,14 @@ module github.com/go-i2p/go-docker-network-i2p
 go 1.24.4
 
 require (
+	github.com/go-i2p/common v0.0.1
+	github.com/go-i2p/go-forward v0.0.0-20250202052226-ee8a43dcb664
 	github.com/go-i2p/go-sam-go v0.33.0
 	github.com/miekg/dns v1.1.68
 )
 
 require (
-	github.com/go-i2p/common v0.0.1 // indirect
 	github.com/go-i2p/crypto v0.0.1 // indirect
-	github.com/go-i2p/go-forward v0.0.0-20250202052226-ee8a43dcb664 // indirect
 	github.com/go-i2p/i2pkeys v0.33.92 // indirect
 	github.com/go-i2p/logger v0.0.1 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect

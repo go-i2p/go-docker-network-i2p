@@ -32,7 +32,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plugin, err := New(tt.sockPath)
+			plugin, err := New(tt.sockPath, nil)
 
 			if tt.wantErr && err == nil {
 				t.Errorf("New() expected error but got none")
@@ -54,7 +54,7 @@ func TestPluginStart(t *testing.T) {
 	tmpDir := t.TempDir()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
-	plugin, err := New(sockPath)
+	plugin, err := New(sockPath, nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestPluginStart(t *testing.T) {
 }
 
 func TestJSONResponseHandling(t *testing.T) {
-	plugin, err := New("/tmp/test.sock")
+	plugin, err := New("/tmp/test.sock", nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestJSONResponseHandling(t *testing.T) {
 }
 
 func TestRequestParsing(t *testing.T) {
-	plugin, err := New("/tmp/test.sock")
+	plugin, err := New("/tmp/test.sock", nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestRequestParsing(t *testing.T) {
 }
 
 func TestErrorHandling(t *testing.T) {
-	plugin, err := New("/tmp/test.sock")
+	plugin, err := New("/tmp/test.sock", nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestErrorHandling(t *testing.T) {
 
 // TestEndpointLifecycle tests the complete endpoint lifecycle from creation to deletion.
 func TestEndpointLifecycle(t *testing.T) {
-	plugin, err := New("/tmp/test.sock")
+	plugin, err := New("/tmp/test.sock", nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestEndpointLifecycle(t *testing.T) {
 
 // TestEndpointErrorCases tests various error conditions in endpoint management.
 func TestEndpointErrorCases(t *testing.T) {
-	plugin, err := New("/tmp/test.sock")
+	plugin, err := New("/tmp/test.sock", nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestEndpointErrorCases(t *testing.T) {
 
 // TestEndpointDuplicateCreation tests handling of duplicate endpoint creation.
 func TestEndpointDuplicateCreation(t *testing.T) {
-	plugin, err := New("/tmp/test.sock")
+	plugin, err := New("/tmp/test.sock", nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
@@ -558,7 +558,7 @@ func TestEndpointDuplicateCreation(t *testing.T) {
 
 // TestMultipleEndpointsOnNetwork tests creating multiple endpoints on the same network.
 func TestMultipleEndpointsOnNetwork(t *testing.T) {
-	plugin, err := New("/tmp/test.sock")
+	plugin, err := New("/tmp/test.sock", nil)
 	if err != nil {
 		t.Fatalf("Failed to create plugin: %v", err)
 	}
