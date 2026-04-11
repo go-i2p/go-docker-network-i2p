@@ -245,9 +245,9 @@ func (c *Config) LoadFromFile(filePath string) error {
 		}
 	}
 
-	// Debug flag is merged if explicitly set in file (even if false)
-	c.Plugin.Debug = fileConfig.Plugin.Debug
-	if c.Plugin.Debug {
+	// Debug flag — only enable from file; cannot distinguish "unset" from "false" in JSON
+	if fileConfig.Plugin.Debug {
+		c.Plugin.Debug = true
 		log.Printf("DEBUG: Loaded DEBUG from file: %v", fileConfig.Plugin.Debug)
 	}
 

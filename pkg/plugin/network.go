@@ -104,6 +104,9 @@ type NetworkManager struct {
 	// defaultSubnet defines the base subnet for I2P networks
 	defaultSubnet *net.IPNet
 
+	// subnetCounter tracks the next third-octet to allocate for auto-assigned subnets
+	subnetCounter uint8
+
 	// mutex protects concurrent access to network manager state
 	mutex sync.RWMutex
 }
@@ -375,6 +378,29 @@ func (nm *NetworkManager) CreateEndpoint(networkID, endpointID string, options m
 	return endpoint, nil
 }
 
+// getNetworkAndEndpoint validates IDs, looks up the network and endpoint.
+// Caller must hold nm.mutex.
+func (nm *NetworkManager) getNetworkAndEndpoint(networkID, endpointID string) (*I2PNetwork, *I2PEndpoint, error) {
+	if networkID == "" {
+		return nil, nil, fmt.Errorf("network ID cannot be empty")
+	}
+	if endpointID == "" {
+		return nil, nil, fmt.Errorf("endpoint ID cannot be empty")
+	}
+
+	network, exists := nm.networks[networkID]
+	if !exists {
+		return nil, nil, fmt.Errorf("network %s not found", networkID)
+	}
+
+	endpoint, exists := network.Endpoints[endpointID]
+	if !exists {
+		return nil, nil, fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+	}
+
+	return network, endpoint, nil
+}
+
 // DeleteEndpoint removes an endpoint from an I2P network.
 //
 // This method implements Docker's DeleteEndpoint operation, cleaning up
@@ -383,23 +409,9 @@ func (nm *NetworkManager) DeleteEndpoint(networkID, endpointID string) error {
 	nm.mutex.Lock()
 	defer nm.mutex.Unlock()
 
-	// Validate inputs
-	if networkID == "" {
-		return fmt.Errorf("network ID cannot be empty")
-	}
-	if endpointID == "" {
-		return fmt.Errorf("endpoint ID cannot be empty")
-	}
-
-	// Get the network
-	network, exists := nm.networks[networkID]
-	if !exists {
-		return fmt.Errorf("network %s not found", networkID)
-	}
-
-	// Check if endpoint exists
-	if _, exists := network.Endpoints[endpointID]; !exists {
-		return fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+	network, _, err := nm.getNetworkAndEndpoint(networkID, endpointID)
+	if err != nil {
+		return err
 	}
 
 	log.Printf("Deleting I2P endpoint %s from network %s", endpointID, networkID)
@@ -421,27 +433,13 @@ func (nm *NetworkManager) JoinEndpoint(networkID, endpointID, containerID, sandb
 	nm.mutex.Lock()
 	defer nm.mutex.Unlock()
 
-	// Validate inputs
-	if networkID == "" {
-		return nil, fmt.Errorf("network ID cannot be empty")
-	}
-	if endpointID == "" {
-		return nil, fmt.Errorf("endpoint ID cannot be empty")
-	}
 	if containerID == "" {
 		return nil, fmt.Errorf("container ID cannot be empty")
 	}
 
-	// Get the network
-	network, exists := nm.networks[networkID]
-	if !exists {
-		return nil, fmt.Errorf("network %s not found", networkID)
-	}
-
-	// Get the endpoint
-	endpoint, exists := network.Endpoints[endpointID]
-	if !exists {
-		return nil, fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+	network, endpoint, err := nm.getNetworkAndEndpoint(networkID, endpointID)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check if endpoint is already joined
@@ -509,24 +507,9 @@ func (nm *NetworkManager) LeaveEndpoint(networkID, endpointID string) error {
 	nm.mutex.Lock()
 	defer nm.mutex.Unlock()
 
-	// Validate inputs
-	if networkID == "" {
-		return fmt.Errorf("network ID cannot be empty")
-	}
-	if endpointID == "" {
-		return fmt.Errorf("endpoint ID cannot be empty")
-	}
-
-	// Get the network
-	network, exists := nm.networks[networkID]
-	if !exists {
-		return fmt.Errorf("network %s not found", networkID)
-	}
-
-	// Get the endpoint
-	endpoint, exists := network.Endpoints[endpointID]
-	if !exists {
-		return fmt.Errorf("endpoint %s not found on network %s", endpointID, networkID)
+	network, endpoint, err := nm.getNetworkAndEndpoint(networkID, endpointID)
+	if err != nil {
+		return err
 	}
 
 	// Check if endpoint is actually joined
@@ -662,14 +645,18 @@ func (nm *NetworkManager) allocateNetworkSubnet(ipamData []IPAMData) (*net.IPNet
 		}
 	}
 
-	// No IPAM data provided, allocate from default subnet
-	// For simplicity, we'll use /24 subnets within our /16 default
-	// In production, this would need more sophisticated allocation
+	// No IPAM data provided, allocate successive /24 subnets within the /16 default.
+	// The counter is protected by NetworkManager.mutex held by the caller.
+	nm.subnetCounter++
+	if nm.subnetCounter == 0 {
+		return nil, nil, fmt.Errorf("subnet address space exhausted (255 auto-allocated networks)")
+	}
+	octet := nm.subnetCounter
 	subnet := &net.IPNet{
-		IP:   net.IPv4(172, 20, 1, 0),
+		IP:   net.IPv4(172, 20, octet, 0),
 		Mask: net.IPv4Mask(255, 255, 255, 0),
 	}
-	gateway := net.IPv4(172, 20, 1, 1)
+	gateway := net.IPv4(172, 20, octet, 1)
 
 	return subnet, gateway, nil
 }

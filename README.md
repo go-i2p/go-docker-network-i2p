@@ -135,7 +135,6 @@ pkg/i2p/                   # I2P SAM client and tunnel management
 pkg/proxy/                 # Traffic interception and proxying
 pkg/service/               # Automatic service exposure
 internal/config/           # Internal configuration management
-test/                      # Integration tests
 ```
 
 ### Security Design
@@ -266,7 +265,7 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 
 ## Project Status
 
-🟢 **Production Ready** - All core functionality and documentation complete  
+� **Beta - Near Production Ready** - All core functionality and documentation complete  
 
 ### Completed Features
 
@@ -277,7 +276,7 @@ See [CONFIG.md](CONFIG.md) for complete configuration reference.
 - ✅ **Service Exposure**: Automatic I2P server tunnel creation
 - ✅ **Traffic Proxying**: Transparent SOCKS and DNS proxying
 - ✅ **Traffic Filtering**: Allowlist/blocklist with wildcard support
-- ✅ **Testing Infrastructure**: Test suite with ~67% average coverage (Config: 89%, I2P: 78%, Service: 92%, Plugin: 28%, Proxy: 47%)
+- ✅ **Testing Infrastructure**: Test suite with ~61% average coverage (Config: 49%, I2P: 76%, Plugin: 51%, Proxy: 49%, Service: 82%)
 
 ## Contributing
 

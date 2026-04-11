@@ -59,23 +59,41 @@ func NewSAMClient(config *SAMConfig) (*SAMClient, error) {
 // Connect establishes a connection to the I2P SAM bridge.
 //
 // This method creates the underlying SAM connection and performs
-// initial connectivity verification.
+// initial connectivity verification. The connection attempt is bounded
+// by the configured timeout (SAMConfig.Timeout) via the provided context.
 func (c *SAMClient) Connect(ctx context.Context) error {
 	log.Printf("Connecting to I2P SAM bridge at %s:%d", c.config.Host, c.config.Port)
 
 	// Create SAM connection address
 	address := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
 
-	// Establish connection with timeout
-	sam, err := sam3.NewSAM(address)
-	if err != nil {
-		return fmt.Errorf("failed to connect to SAM bridge: %w", err)
+	// Derive a timeout context from the configured timeout
+	connectCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
+
+	// Establish connection with timeout via goroutine + select
+	type samResult struct {
+		sam *sam3.SAM
+		err error
+	}
+	ch := make(chan samResult, 1)
+	go func() {
+		sam, err := sam3.NewSAM(address)
+		ch <- samResult{sam: sam, err: err}
+	}()
+
+	select {
+	case <-connectCtx.Done():
+		return fmt.Errorf("SAM bridge connection timed out after %v: %w", c.config.Timeout, connectCtx.Err())
+	case result := <-ch:
+		if result.err != nil {
+			return fmt.Errorf("failed to connect to SAM bridge: %w", result.err)
+		}
+		c.sam = result.sam
 	}
 
-	c.sam = sam
-
 	// Verify connectivity by creating a basic resolver
-	if err := c.verifyConnectivity(ctx); err != nil {
+	if err := c.verifyConnectivity(connectCtx); err != nil {
 		c.sam.Close()
 		c.sam = nil
 		return fmt.Errorf("SAM bridge connectivity verification failed: %w", err)

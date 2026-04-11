@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -67,7 +68,7 @@ func (r *I2PDNSResolver) Start() error {
 	// Start TCP server in background
 	go func() {
 		if err := tcpServer.ListenAndServe(); err != nil {
-			// Log error but don't fail UDP server
+			log.Printf("DNS TCP server error on %s: %v", r.listenAddr, err)
 		}
 	}()
 
@@ -140,17 +141,8 @@ func (r *I2PDNSResolver) resolveQuestion(question dns.Question) dns.RR {
 //
 // I2P domains include .i2p domains and base32 addresses.
 func (r *I2PDNSResolver) isI2PDomain(domain string) bool {
-	// Check for .i2p domain
-	if strings.HasSuffix(domain, ".i2p") {
-		return true
-	}
-
-	// Check for .b32.i2p domain (base32 encoded address)
-	if strings.HasSuffix(domain, ".b32.i2p") {
-		return true
-	}
-
-	return false
+	// Check for .i2p domain (includes .b32.i2p as a subset)
+	return strings.HasSuffix(domain, ".i2p")
 }
 
 // resolveA creates an A record response for I2P domains.

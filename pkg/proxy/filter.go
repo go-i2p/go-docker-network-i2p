@@ -151,11 +151,8 @@ func (tf *TrafficFilter) GetConfig() FilterConfig {
 	return *tf.config
 }
 
-// AddToAllowlist adds a destination to the allowlist.
-//
-// Destinations can be exact matches (example.i2p) or patterns (*.example.i2p).
-// The allowlist takes precedence over the blocklist.
-func (tf *TrafficFilter) AddToAllowlist(destination string) error {
+// addToFilterList is the shared implementation for AddToAllowlist and AddToBlocklist.
+func (tf *TrafficFilter) addToFilterList(destination, listName string, list map[string]bool, regexMap map[string]*regexp.Regexp) error {
 	if destination == "" {
 		return fmt.Errorf("destination cannot be empty")
 	}
@@ -169,22 +166,30 @@ func (tf *TrafficFilter) AddToAllowlist(destination string) error {
 	defer tf.mutex.Unlock()
 
 	destLower := strings.ToLower(destination)
-	tf.allowlist[destLower] = true
+	list[destLower] = true
 
 	// Pre-compile regex pattern if this is a wildcard pattern
 	if strings.Contains(destination, "*") {
 		if regex, err := tf.compileWildcardPattern(destination); err == nil {
-			tf.allowlistRegex[destLower] = regex
+			regexMap[destLower] = regex
 		} else {
 			log.Printf("Warning: Failed to compile wildcard pattern %s: %v", destination, err)
 		}
 	}
 
 	if tf.config.LogTraffic {
-		log.Printf("Added destination to allowlist: %s", destination)
+		log.Printf("Added destination to %s: %s", listName, destination)
 	}
 
 	return nil
+}
+
+// AddToAllowlist adds a destination to the allowlist.
+//
+// Destinations can be exact matches (example.i2p) or patterns (*.example.i2p).
+// The allowlist takes precedence over the blocklist.
+func (tf *TrafficFilter) AddToAllowlist(destination string) error {
+	return tf.addToFilterList(destination, "allowlist", tf.allowlist, tf.allowlistRegex)
 }
 
 // AddToBlocklist adds a destination to the blocklist.
@@ -192,35 +197,7 @@ func (tf *TrafficFilter) AddToAllowlist(destination string) error {
 // Destinations can be exact matches (example.i2p) or patterns (*.example.i2p).
 // The allowlist takes precedence over the blocklist.
 func (tf *TrafficFilter) AddToBlocklist(destination string) error {
-	if destination == "" {
-		return fmt.Errorf("destination cannot be empty")
-	}
-
-	// Validate I2P destination format
-	if !tf.isValidI2PDestination(destination) {
-		return fmt.Errorf("invalid I2P destination format: %s", destination)
-	}
-
-	tf.mutex.Lock()
-	defer tf.mutex.Unlock()
-
-	destLower := strings.ToLower(destination)
-	tf.blocklist[destLower] = true
-
-	// Pre-compile regex pattern if this is a wildcard pattern
-	if strings.Contains(destination, "*") {
-		if regex, err := tf.compileWildcardPattern(destination); err == nil {
-			tf.blocklistRegex[destLower] = regex
-		} else {
-			log.Printf("Warning: Failed to compile wildcard pattern %s: %v", destination, err)
-		}
-	}
-
-	if tf.config.LogTraffic {
-		log.Printf("Added destination to blocklist: %s", destination)
-	}
-
-	return nil
+	return tf.addToFilterList(destination, "blocklist", tf.blocklist, tf.blocklistRegex)
 }
 
 // RemoveFromAllowlist removes a destination from the allowlist.

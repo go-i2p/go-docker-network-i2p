@@ -119,14 +119,24 @@ func TestTunnelManagerCreateTunnel(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid port - zero",
+			name: "invalid port - zero for server tunnel",
+			config: &TunnelConfig{
+				Name:        "test-tunnel",
+				ContainerID: "container-123",
+				Type:        TunnelTypeServer,
+				LocalPort:   0,
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid port - zero for client tunnel",
 			config: &TunnelConfig{
 				Name:        "test-tunnel",
 				ContainerID: "container-123",
 				Type:        TunnelTypeClient,
 				LocalPort:   0,
 			},
-			wantErr: true,
+			wantErr: !i2pAvailable, // Succeed if I2P is available, fail if not
 		},
 		{
 			name: "invalid port - negative",

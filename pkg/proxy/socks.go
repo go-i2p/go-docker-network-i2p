@@ -266,7 +266,8 @@ func (s *SOCKSProxy) isI2PDestination(target string) bool {
 
 // connectToI2P establishes a connection to an I2P destination.
 //
-// This method creates an I2P client tunnel and connects to the target.
+// This method creates an I2P client tunnel and dials the destination
+// directly through the SAM streaming session.
 func (s *SOCKSProxy) connectToI2P(target string) (net.Conn, error) {
 	host, portStr, err := net.SplitHostPort(target)
 	if err != nil {
@@ -284,7 +285,7 @@ func (s *SOCKSProxy) connectToI2P(target string) (net.Conn, error) {
 		ContainerID: "proxy-session",
 		Type:        i2p.TunnelTypeClient,
 		LocalHost:   "127.0.0.1",
-		LocalPort:   0, // Let system assign port
+		LocalPort:   0, // System-assigned; we dial via SAM directly
 		Destination: host,
 		Options:     i2p.DefaultTunnelOptions(),
 	}
@@ -295,9 +296,8 @@ func (s *SOCKSProxy) connectToI2P(target string) (net.Conn, error) {
 		return nil, fmt.Errorf("failed to create I2P tunnel: %w", err)
 	}
 
-	// Connect through the tunnel
-	tunnelAddr := tunnel.GetLocalEndpoint()
-	conn, err := net.DialTimeout("tcp", tunnelAddr, 30*time.Second)
+	// Dial the destination directly through the SAM stream session
+	conn, err := tunnel.Dial(host)
 	if err != nil {
 		s.tunnelManager.DestroyTunnel(tunnel.GetConfig().Name)
 		return nil, fmt.Errorf("failed to connect through I2P tunnel: %w", err)

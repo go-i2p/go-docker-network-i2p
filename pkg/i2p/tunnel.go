@@ -22,9 +22,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"time"
 
 	sam3 "github.com/go-i2p/go-sam-go"
+	"github.com/go-i2p/go-sam-go/primary"
 )
 
 // TunnelType represents the type of I2P tunnel.
@@ -358,8 +360,12 @@ func (tm *TunnelManager) validateTunnelConfig(config *TunnelConfig) error {
 		config.LocalHost = "127.0.0.1" // Default to localhost
 	}
 
-	if config.LocalPort <= 0 || config.LocalPort > 65535 {
-		return fmt.Errorf("invalid local port: %d", config.LocalPort)
+	// Server tunnels require a valid port; client tunnels allow 0 (system-assigned)
+	if config.Type == TunnelTypeServer && (config.LocalPort <= 0 || config.LocalPort > 65535) {
+		return fmt.Errorf("invalid local port for server tunnel: %d", config.LocalPort)
+	}
+	if config.Type == TunnelTypeClient && (config.LocalPort < 0 || config.LocalPort > 65535) {
+		return fmt.Errorf("invalid local port for client tunnel: %d", config.LocalPort)
 	}
 
 	// Apply default options if not specified
@@ -465,6 +471,24 @@ func (t *Tunnel) GetDestination() string {
 // GetLocalEndpoint returns the local endpoint (host:port) for this tunnel.
 func (t *Tunnel) GetLocalEndpoint() string {
 	return fmt.Sprintf("%s:%d", t.config.LocalHost, t.config.LocalPort)
+}
+
+// Dial connects to the tunnel's I2P destination using the underlying stream session.
+// This bypasses the local TCP bounce and uses SAM streaming directly.
+// Returns a net.Conn that can be used for bidirectional communication.
+func (t *Tunnel) Dial(destination string) (net.Conn, error) {
+	if !t.active {
+		return nil, fmt.Errorf("tunnel %s is not active", t.config.Name)
+	}
+	sub, ok := t.session.(*primary.StreamSubSession)
+	if !ok {
+		return nil, fmt.Errorf("tunnel %s does not have a stream session for dialing", t.config.Name)
+	}
+	conn, err := sub.Dial(destination)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial %s via tunnel %s: %w", destination, t.config.Name, err)
+	}
+	return conn, nil
 }
 
 // GetOrCreateContainerSession gets or creates a primary I2P session for a container.
