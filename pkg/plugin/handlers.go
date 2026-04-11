@@ -175,7 +175,7 @@ func (p *Plugin) handleEndpointInfo(w http.ResponseWriter, r *http.Request) {
 			// Add service addresses to endpoint info (accessible via docker inspect)
 			serviceAddresses := make(map[string]string)
 			for _, exposure := range endpoint.ServiceExposures {
-				portKey := exposure.TunnelName
+				portKey := exposure.Port.ServiceName
 				serviceAddresses[portKey] = exposure.Destination
 			}
 			value["com.i2p.service.addresses"] = serviceAddresses
@@ -413,15 +413,7 @@ func (p *Plugin) handleProgramExternalConnectivity(w http.ResponseWriter, r *htt
 		// Parse host IP - check HostIP field first, default to 127.0.0.1
 		hostIP = "127.0.0.1"
 		if hostIPBytes, ok := bindingMap["HostIP"].([]interface{}); ok && len(hostIPBytes) >= 4 {
-			// Convert byte array to IP string
-			ipBytes := make([]byte, len(hostIPBytes))
-			for j, b := range hostIPBytes {
-				if bFloat, ok := b.(float64); ok {
-					ipBytes[j] = byte(bFloat)
-				}
-			}
-			parsedIP := net.IP(ipBytes)
-			if parsedIP != nil && !parsedIP.IsUnspecified() {
+			if parsedIP := parseIPFromByteArray(hostIPBytes); parsedIP != nil {
 				hostIP = parsedIP.String()
 			}
 		}
@@ -529,4 +521,20 @@ func extractContainerID(sandboxKey string) string {
 	}
 
 	return sandboxKey
+}
+
+// parseIPFromByteArray converts a JSON byte array ([]interface{} of float64) to a net.IP.
+// Returns nil if the result is unspecified (0.0.0.0) or cannot be parsed.
+func parseIPFromByteArray(hostIPBytes []interface{}) net.IP {
+	ipBytes := make([]byte, len(hostIPBytes))
+	for j, b := range hostIPBytes {
+		if bFloat, ok := b.(float64); ok {
+			ipBytes[j] = byte(bFloat)
+		}
+	}
+	parsedIP := net.IP(ipBytes)
+	if parsedIP == nil || parsedIP.IsUnspecified() {
+		return nil
+	}
+	return parsedIP
 }

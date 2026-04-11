@@ -107,25 +107,25 @@ func TestNewSAMClient(t *testing.T) {
 }
 
 func TestSAMClientConnectionLifecycle(t *testing.T) {
-	// Test with unreachable host to verify error handling
+	// Test with a port that immediately refuses connections
 	config := &SAMConfig{
-		Host:    "192.0.2.1", // RFC5737 test address - should be unreachable
-		Port:    7656,
-		Timeout: 1 * time.Second,
+		Host:    "127.0.0.1",
+		Port:    65434, // Unlikely to have a listener
+		Timeout: 2 * time.Second,
 	}
 
 	client, err := NewSAMClient(config)
 	if err != nil {
-		t.Fatalf("Unexpected error creating client with unreachable host: %v", err)
+		t.Fatalf("Unexpected error creating client: %v", err)
 	}
 
-	// Connection should fail because the host is unreachable
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Connection should fail because nothing is listening on this port
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	err = client.Connect(ctx)
 	if err == nil {
-		t.Error("Expected connection error for unreachable host")
+		t.Error("Expected connection error for unreachable port")
 	}
 
 	// Test disconnect (should not panic even if not connected)

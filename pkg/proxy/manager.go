@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 
@@ -109,7 +110,7 @@ func (pm *ProxyManager) Start() error {
 	go func() {
 		defer pm.wg.Done()
 		if err := pm.socksProxy.Start(); err != nil && err != context.Canceled {
-			// Log error but don't fail startup
+			log.Printf("SOCKS proxy failed: %v", err)
 		}
 	}()
 
@@ -118,7 +119,7 @@ func (pm *ProxyManager) Start() error {
 	go func() {
 		defer pm.wg.Done()
 		if err := pm.dnsResolver.Start(); err != nil && err != context.Canceled {
-			// Log error but don't fail startup
+			log.Printf("DNS resolver failed: %v", err)
 		}
 	}()
 
