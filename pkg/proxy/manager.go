@@ -15,11 +15,11 @@ type IptablesChecker interface {
 	IsAvailable() error
 }
 
-// ProxyManager coordinates transparent I2P proxying for Docker networks.
+// Manager coordinates transparent I2P proxying for Docker networks.
 //
-// The ProxyManager integrates traffic interception, SOCKS proxying, and DNS
+// The Manager integrates traffic interception, SOCKS proxying, and DNS
 // resolution to provide transparent I2P connectivity for Docker containers.
-type ProxyManager struct {
+type Manager struct {
 	// interceptor manages iptables rules for traffic interception
 	interceptor *TrafficInterceptor
 	// iptablesChecker verifies iptables availability (defaults to interceptor)
@@ -33,7 +33,7 @@ type ProxyManager struct {
 	// tunnelManager manages I2P tunnels
 	tunnelManager *i2p.TunnelManager
 	// config holds proxy configuration
-	config *ProxyConfig
+	config *Config
 	// ctx is the context for proxy operation
 	ctx context.Context
 	// cancel cancels the proxy context
@@ -42,8 +42,8 @@ type ProxyManager struct {
 	wg sync.WaitGroup
 }
 
-// ProxyConfig holds configuration for the proxy manager.
-type ProxyConfig struct {
+// Config holds configuration for the proxy manager.
+type Config struct {
 	// ContainerSubnet is the subnet used by I2P containers
 	ContainerSubnet *net.IPNet
 	// SOCKSPort is the port for the SOCKS proxy
@@ -56,9 +56,9 @@ type ProxyConfig struct {
 	DNSBindAddr string
 }
 
-// DefaultProxyConfig returns a default proxy configuration.
-func DefaultProxyConfig(subnet *net.IPNet) *ProxyConfig {
-	return &ProxyConfig{
+// DefaultConfig returns a default proxy configuration.
+func DefaultConfig(subnet *net.IPNet) *Config {
+	return &Config{
 		ContainerSubnet: subnet,
 		SOCKSPort:       1080,
 		DNSPort:         53,
@@ -67,11 +67,11 @@ func DefaultProxyConfig(subnet *net.IPNet) *ProxyConfig {
 	}
 }
 
-// NewProxyManager creates a new proxy manager with the given configuration.
+// NewManager creates a new proxy manager with the given configuration.
 //
 // The proxy manager will use the provided tunnel manager for I2P connectivity
 // and configure all proxy components according to the configuration.
-func NewProxyManager(config *ProxyConfig, tunnelManager *i2p.TunnelManager) *ProxyManager {
+func NewManager(config *Config, tunnelManager *i2p.TunnelManager) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create shared traffic filter for all components
@@ -82,7 +82,7 @@ func NewProxyManager(config *ProxyConfig, tunnelManager *i2p.TunnelManager) *Pro
 	socksProxy.SetTrafficFilter(trafficFilter)
 	dnsResolver := NewI2PDNSResolver(config.DNSBindAddr)
 
-	return &ProxyManager{
+	return &Manager{
 		interceptor:     interceptor,
 		iptablesChecker: interceptor,
 		socksProxy:      socksProxy,
@@ -99,7 +99,7 @@ func NewProxyManager(config *ProxyConfig, tunnelManager *i2p.TunnelManager) *Pro
 //
 // This method starts the SOCKS proxy, DNS resolver, and configures iptables
 // rules for transparent traffic interception.
-func (pm *ProxyManager) Start() error {
+func (pm *Manager) Start() error {
 	// Check if iptables is available
 	if err := pm.interceptor.IsAvailable(); err != nil {
 		return fmt.Errorf("iptables not available: %w", err)
@@ -136,7 +136,7 @@ func (pm *ProxyManager) Start() error {
 //
 // This method stops all running services and removes the iptables rules
 // that were set up for traffic interception.
-func (pm *ProxyManager) Stop() error {
+func (pm *Manager) Stop() error {
 	pm.cancel()
 
 	var errors []string
@@ -167,7 +167,7 @@ func (pm *ProxyManager) Stop() error {
 }
 
 // IsRunning returns true if the proxy manager is currently running.
-func (pm *ProxyManager) IsRunning() bool {
+func (pm *Manager) IsRunning() bool {
 	select {
 	case <-pm.ctx.Done():
 		return false
@@ -181,23 +181,23 @@ func (pm *ProxyManager) IsRunning() bool {
 // This method should be called before creating networks to enforce the security
 // requirement that iptables must be available for traffic filtering.
 // Returns an error if iptables is not available or cannot be used.
-func (pm *ProxyManager) CheckIptablesAvailability() error {
+func (pm *Manager) CheckIptablesAvailability() error {
 	return pm.iptablesChecker.IsAvailable()
 }
 
 // SetIptablesChecker overrides the default iptables checker.
 // This is primarily useful for testing.
-func (pm *ProxyManager) SetIptablesChecker(checker IptablesChecker) {
+func (pm *Manager) SetIptablesChecker(checker IptablesChecker) {
 	pm.iptablesChecker = checker
 }
 
 // GetConfig returns the current proxy configuration.
-func (pm *ProxyManager) GetConfig() *ProxyConfig {
+func (pm *Manager) GetConfig() *Config {
 	return pm.config
 }
 
 // GetTrafficFilter returns the traffic filter for configuration and monitoring.
-func (pm *ProxyManager) GetTrafficFilter() *TrafficFilter {
+func (pm *Manager) GetTrafficFilter() *TrafficFilter {
 	return pm.trafficFilter
 }
 
@@ -205,14 +205,14 @@ func (pm *ProxyManager) GetTrafficFilter() *TrafficFilter {
 //
 // This allows changing filter modes (allowlist/blocklist enable/disable) at runtime.
 // Existing allowlist/blocklist entries are preserved.
-func (pm *ProxyManager) UpdateFilterConfig(config *FilterConfig) {
+func (pm *Manager) UpdateFilterConfig(config *FilterConfig) {
 	if pm.trafficFilter != nil {
 		pm.trafficFilter.UpdateConfig(config)
 	}
 }
 
 // GetFilterConfig returns the current filter configuration.
-func (pm *ProxyManager) GetFilterConfig() FilterConfig {
+func (pm *Manager) GetFilterConfig() FilterConfig {
 	if pm.trafficFilter != nil {
 		return pm.trafficFilter.GetConfig()
 	}
@@ -220,42 +220,42 @@ func (pm *ProxyManager) GetFilterConfig() FilterConfig {
 }
 
 // AddToAllowlist adds a destination to the traffic filter allowlist.
-func (pm *ProxyManager) AddToAllowlist(destination string) error {
+func (pm *Manager) AddToAllowlist(destination string) error {
 	return pm.trafficFilter.AddToAllowlist(destination)
 }
 
 // AddToBlocklist adds a destination to the traffic filter blocklist.
-func (pm *ProxyManager) AddToBlocklist(destination string) error {
+func (pm *Manager) AddToBlocklist(destination string) error {
 	return pm.trafficFilter.AddToBlocklist(destination)
 }
 
 // RemoveFromAllowlist removes a destination from the allowlist.
-func (pm *ProxyManager) RemoveFromAllowlist(destination string) {
+func (pm *Manager) RemoveFromAllowlist(destination string) {
 	pm.trafficFilter.RemoveFromAllowlist(destination)
 }
 
 // RemoveFromBlocklist removes a destination from the blocklist.
-func (pm *ProxyManager) RemoveFromBlocklist(destination string) {
+func (pm *Manager) RemoveFromBlocklist(destination string) {
 	pm.trafficFilter.RemoveFromBlocklist(destination)
 }
 
 // GetTrafficStats returns current traffic statistics.
-func (pm *ProxyManager) GetTrafficStats() TrafficStatsSnapshot {
+func (pm *Manager) GetTrafficStats() TrafficStatsSnapshot {
 	return pm.trafficFilter.GetStats()
 }
 
 // GetRecentTrafficLogs returns recent traffic log entries.
-func (pm *ProxyManager) GetRecentTrafficLogs(limit int) []TrafficLogEntry {
+func (pm *Manager) GetRecentTrafficLogs(limit int) []TrafficLogEntry {
 	return pm.trafficFilter.GetRecentLogs(limit)
 }
 
 // ClearTrafficStats resets all traffic statistics and logs.
-func (pm *ProxyManager) ClearTrafficStats() {
+func (pm *Manager) ClearTrafficStats() {
 	pm.trafficFilter.ClearStats()
 }
 
 // GetAllowlist returns the current allowlist
-func (pm *ProxyManager) GetAllowlist() []string {
+func (pm *Manager) GetAllowlist() []string {
 	if pm.trafficFilter != nil {
 		return pm.trafficFilter.GetAllowlist()
 	}
@@ -263,7 +263,7 @@ func (pm *ProxyManager) GetAllowlist() []string {
 }
 
 // GetBlocklist returns the current blocklist
-func (pm *ProxyManager) GetBlocklist() []string {
+func (pm *Manager) GetBlocklist() []string {
 	if pm.trafficFilter != nil {
 		return pm.trafficFilter.GetBlocklist()
 	}

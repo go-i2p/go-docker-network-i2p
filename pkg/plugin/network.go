@@ -80,7 +80,7 @@ type I2PEndpoint struct {
 	ServerTunnels map[string]*i2p.Tunnel
 
 	// ServiceExposures contains I2P addresses for exposed services
-	ServiceExposures []*service.ServiceExposure
+	ServiceExposures []*service.Exposure
 }
 
 // NetworkManager manages I2P networks and their lifecycle.
@@ -96,10 +96,10 @@ type NetworkManager struct {
 	tunnelMgr *i2p.TunnelManager
 
 	// proxyMgr handles transparent I2P proxying for containers
-	proxyMgr *proxy.ProxyManager
+	proxyMgr *proxy.Manager
 
 	// serviceMgr handles I2P service exposure for containers
-	serviceMgr *service.ServiceExposureManager
+	serviceMgr *service.ExposureManager
 
 	// defaultSubnet defines the base subnet for I2P networks
 	defaultSubnet *net.IPNet
@@ -126,13 +126,13 @@ func NewNetworkManager(tunnelMgr *i2p.TunnelManager) (*NetworkManager, error) {
 	}
 
 	// Create proxy configuration with default settings
-	proxyConfig := proxy.DefaultProxyConfig(defaultSubnet)
+	proxyConfig := proxy.DefaultConfig(defaultSubnet)
 
 	// Create proxy manager for transparent I2P proxying
-	proxyMgr := proxy.NewProxyManager(proxyConfig, tunnelMgr)
+	proxyMgr := proxy.NewManager(proxyConfig, tunnelMgr)
 
 	// Create service exposure manager for I2P service exposure
-	serviceMgr, err := service.NewServiceExposureManager(tunnelMgr)
+	serviceMgr, err := service.NewExposureManager(tunnelMgr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create service exposure manager: %w", err)
 	}
@@ -929,6 +929,6 @@ func (nm *NetworkManager) Shutdown() error {
 //
 // This is a helper method to allow external callers (like ProgramExternalConnectivity)
 // to expose services without direct access to the service manager.
-func (nm *NetworkManager) ExposeServicesForEndpoint(containerID, networkID string, containerIP net.IP, ports []service.ExposedPort) ([]*service.ServiceExposure, error) {
+func (nm *NetworkManager) ExposeServicesForEndpoint(containerID, networkID string, containerIP net.IP, ports []service.ExposedPort) ([]*service.Exposure, error) {
 	return nm.serviceMgr.ExposeServices(containerID, networkID, containerIP, ports)
 }

@@ -68,8 +68,8 @@ type NetworkExposureConfig struct {
 	AllowIPExposure bool
 }
 
-// ServiceExposure represents an I2P service exposure configuration.
-type ServiceExposure struct {
+// Exposure represents an I2P service exposure configuration.
+type Exposure struct {
 	// ContainerID identifies the container providing the service
 	ContainerID string
 	// Port is the exposed port configuration
@@ -102,16 +102,16 @@ type PortForwarder struct {
 	wg sync.WaitGroup
 }
 
-// ServiceExposureManager manages I2P service exposure for containers.
+// ExposureManager manages I2P service exposure for containers.
 //
 // The manager handles automatic detection of exposed ports, creation of
 // I2P server tunnels, and generation of .b32.i2p addresses for services.
-type ServiceExposureManager struct {
+type ExposureManager struct {
 	// tunnelMgr provides I2P tunnel management capabilities
 	tunnelMgr *i2p.TunnelManager
 
 	// exposures tracks all active service exposures by container ID
-	exposures map[string][]*ServiceExposure
+	exposures map[string][]*Exposure
 
 	// mutex protects concurrent access to exposures
 	mutex sync.RWMutex
@@ -123,19 +123,19 @@ type ServiceExposureManager struct {
 	cancel context.CancelFunc
 }
 
-// NewServiceExposureManager creates a new service exposure manager.
+// NewExposureManager creates a new service exposure manager.
 //
 // The manager requires a TunnelManager to create I2P server tunnels for exposed services.
-func NewServiceExposureManager(tunnelMgr *i2p.TunnelManager) (*ServiceExposureManager, error) {
+func NewExposureManager(tunnelMgr *i2p.TunnelManager) (*ExposureManager, error) {
 	if tunnelMgr == nil {
 		return nil, fmt.Errorf("tunnel manager cannot be nil")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &ServiceExposureManager{
+	return &ExposureManager{
 		tunnelMgr: tunnelMgr,
-		exposures: make(map[string][]*ServiceExposure),
+		exposures: make(map[string][]*Exposure),
 		ctx:       ctx,
 		cancel:    cancel,
 	}, nil
@@ -154,7 +154,7 @@ func NewServiceExposureManager(tunnelMgr *i2p.TunnelManager) (*ServiceExposureMa
 // precedence over automatically detected ports. Ports detected from EXPOSE
 // directives and environment variables default to I2P exposure for backward
 // compatibility.
-func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, options map[string]interface{}) ([]ExposedPort, error) {
+func (sem *ExposureManager) DetectExposedPorts(containerID string, options map[string]interface{}) ([]ExposedPort, error) {
 	if containerID == "" {
 		return nil, fmt.Errorf("container ID cannot be empty")
 	}
@@ -210,7 +210,7 @@ func (sem *ServiceExposureManager) DetectExposedPorts(containerID string, option
 //
 // This method parses Docker container options looking for port specifications
 // in various formats that Docker supports.
-func (sem *ServiceExposureManager) extractPortsFromOptions(options map[string]interface{}) []ExposedPort {
+func (sem *ExposureManager) extractPortsFromOptions(options map[string]interface{}) []ExposedPort {
 	var ports []ExposedPort
 
 	// Check for "ExposedPorts" option (Docker format)
@@ -244,7 +244,7 @@ func (sem *ServiceExposureManager) extractPortsFromOptions(options map[string]in
 //
 // This method looks for common environment variable patterns that indicate
 // services and their ports (e.g., PORT=8080, HTTP_PORT=80, etc.).
-func (sem *ServiceExposureManager) extractPortsFromEnvironment(options map[string]interface{}) []ExposedPort {
+func (sem *ExposureManager) extractPortsFromEnvironment(options map[string]interface{}) []ExposedPort {
 	var ports []ExposedPort
 
 	// Check for environment variables in options
@@ -264,7 +264,7 @@ func (sem *ServiceExposureManager) extractPortsFromEnvironment(options map[strin
 }
 
 // parsePortSpec parses a Docker port specification (e.g., "80/tcp", "443/tcp").
-func (sem *ServiceExposureManager) parsePortSpec(portSpec string) *ExposedPort {
+func (sem *ExposureManager) parsePortSpec(portSpec string) *ExposedPort {
 	// Match pattern like "80/tcp" or "443/udp"
 	re := regexp.MustCompile(`^(\d+)/(tcp|udp)$`)
 	matches := re.FindStringSubmatch(portSpec)
@@ -287,7 +287,7 @@ func (sem *ServiceExposureManager) parsePortSpec(portSpec string) *ExposedPort {
 }
 
 // parsePortMapping parses Docker port mapping information.
-func (sem *ServiceExposureManager) parsePortMapping(portData map[string]interface{}) *ExposedPort {
+func (sem *ExposureManager) parsePortMapping(portData map[string]interface{}) *ExposedPort {
 	// Extract container port
 	containerPort, ok := portData["ContainerPort"]
 	if !ok {
@@ -330,7 +330,7 @@ func (sem *ServiceExposureManager) parsePortMapping(portData map[string]interfac
 }
 
 // parseEnvironmentPort parses environment variables for port information.
-func (sem *ServiceExposureManager) parseEnvironmentPort(envVar string) *ExposedPort {
+func (sem *ExposureManager) parseEnvironmentPort(envVar string) *ExposedPort {
 	// Look for patterns like "PORT=8080", "HTTP_PORT=80", "SERVICE_PORT=3000"
 	portPatterns := []string{
 		`^PORT=(\d+)$`,
@@ -380,7 +380,7 @@ func (sem *ServiceExposureManager) parseEnvironmentPort(envVar string) *ExposedP
 // determine how ports should be exposed. Label format:
 //   - i2p.expose.80=i2p          (expose port 80 to I2P network)
 //   - i2p.expose.443=ip:127.0.0.1 (expose port 443 to localhost IP)
-func (sem *ServiceExposureManager) extractPortsFromLabels(options map[string]interface{}) []ExposedPort {
+func (sem *ExposureManager) extractPortsFromLabels(options map[string]interface{}) []ExposedPort {
 	var ports []ExposedPort
 
 	// Look for Labels in options
@@ -406,7 +406,7 @@ func (sem *ServiceExposureManager) extractPortsFromLabels(options map[string]int
 //   - i2p.expose.443=ip:127.0.0.1 (expose port 443 to localhost)
 //
 // Returns nil if the label format is invalid.
-func (sem *ServiceExposureManager) parseExposureLabel(key string, value interface{}) *ExposedPort {
+func (sem *ExposureManager) parseExposureLabel(key string, value interface{}) *ExposedPort {
 	// Extract port number from label key (e.g., "i2p.expose.80" -> "80")
 	portStr := strings.TrimPrefix(key, "i2p.expose.")
 	port, err := strconv.Atoi(portStr)
@@ -468,7 +468,7 @@ func (sem *ServiceExposureManager) parseExposureLabel(key string, value interfac
 //
 // This allows the same port number to be exposed with different exposure types
 // (e.g., port 80 can be exposed via both I2P and IP simultaneously).
-func (sem *ServiceExposureManager) isPortConfigured(port int, exposureType ExposureType, configuredPorts []ExposedPort) bool {
+func (sem *ExposureManager) isPortConfigured(port int, exposureType ExposureType, configuredPorts []ExposedPort) bool {
 	for _, p := range configuredPorts {
 		if p.ContainerPort == port && p.ExposureType == exposureType {
 			return true
@@ -481,7 +481,7 @@ func (sem *ServiceExposureManager) isPortConfigured(port int, exposureType Expos
 //
 // This is used for strict priority enforcement where any configuration
 // of a port (regardless of exposure type) blocks further auto-detection.
-func (sem *ServiceExposureManager) isPortConfiguredAny(port int, configuredPorts []ExposedPort) bool {
+func (sem *ExposureManager) isPortConfiguredAny(port int, configuredPorts []ExposedPort) bool {
 	for _, p := range configuredPorts {
 		if p.ContainerPort == port {
 			return true
@@ -490,7 +490,7 @@ func (sem *ServiceExposureManager) isPortConfiguredAny(port int, configuredPorts
 	return false
 }
 
-// createIPServiceExposure creates an IP-based service exposure.
+// createIPExposure creates an IP-based service exposure.
 //
 // This creates a direct IP:port exposure without I2P tunneling. The service
 // is made available on the specified target IP (defaults to 127.0.0.1).
@@ -499,7 +499,7 @@ func (sem *ServiceExposureManager) isPortConfiguredAny(port int, configuredPorts
 // Unlike I2P exposure which creates .b32.i2p addresses, IP exposure provides
 // standard IP:port access to the container service using go-forward for
 // efficient TCP port forwarding.
-func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
+func (sem *ExposureManager) createIPExposure(containerID string, containerIP net.IP, port ExposedPort) (*Exposure, error) {
 	// Validate and set default target IP
 	targetIP := port.TargetIP
 	if targetIP == "" {
@@ -548,7 +548,7 @@ func (sem *ServiceExposureManager) createIPServiceExposure(containerID string, c
 
 	log.Printf("IP exposure created: %s/%s -> %s (container %s)", listenAddr, protocol, containerAddr, containerID)
 
-	return &ServiceExposure{
+	return &Exposure{
 		ContainerID: containerID,
 		Port:        port,
 		Tunnel:      nil, // No I2P tunnel for IP exposure
@@ -719,13 +719,13 @@ func (pf *PortForwarder) Stop() error {
 	return nil
 }
 
-// createI2PServiceExposure creates an I2P-based service exposure.
+// createI2PExposure creates an I2P-based service exposure.
 //
-// This method wraps the existing createServiceExposure logic and is named
+// This method wraps the existing createExposure logic and is named
 // explicitly to distinguish it from IP-based exposures. It creates an I2P
 // server tunnel that allows external I2P users to access the container service.
-func (sem *ServiceExposureManager) createI2PServiceExposure(containerID string, networkID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
-	return sem.createServiceExposure(containerID, networkID, containerIP, port)
+func (sem *ExposureManager) createI2PExposure(containerID string, networkID string, containerIP net.IP, port ExposedPort) (*Exposure, error) {
+	return sem.createExposure(containerID, networkID, containerIP, port)
 }
 
 // ExposeServices creates service exposures for the specified ports based on their exposure type.
@@ -737,7 +737,7 @@ func (sem *ServiceExposureManager) createI2PServiceExposure(containerID string, 
 // The method routes each port to the appropriate exposure handler based on
 // its ExposureType field. If no ExposureType is specified, it defaults to
 // I2P exposure for backward compatibility.
-func (sem *ServiceExposureManager) ExposeServices(containerID string, networkID string, containerIP net.IP, ports []ExposedPort) ([]*ServiceExposure, error) {
+func (sem *ExposureManager) ExposeServices(containerID string, networkID string, containerIP net.IP, ports []ExposedPort) ([]*Exposure, error) {
 	if containerID == "" {
 		return nil, fmt.Errorf("container ID cannot be empty")
 	}
@@ -751,22 +751,22 @@ func (sem *ServiceExposureManager) ExposeServices(containerID string, networkID 
 	sem.mutex.Lock()
 	defer sem.mutex.Unlock()
 
-	var exposures []*ServiceExposure
+	var exposures []*Exposure
 
 	for _, port := range ports {
-		var exposure *ServiceExposure
+		var exposure *Exposure
 		var err error
 
 		// Route to appropriate exposure handler based on type
 		switch port.ExposureType {
 		case ExposureTypeI2P:
-			exposure, err = sem.createI2PServiceExposure(containerID, networkID, containerIP, port)
+			exposure, err = sem.createI2PExposure(containerID, networkID, containerIP, port)
 		case ExposureTypeIP:
-			exposure, err = sem.createIPServiceExposure(containerID, containerIP, port)
+			exposure, err = sem.createIPExposure(containerID, containerIP, port)
 		default:
 			// Default to I2P for backward compatibility and unknown types
 			port.ExposureType = ExposureTypeI2P
-			exposure, err = sem.createI2PServiceExposure(containerID, networkID, containerIP, port)
+			exposure, err = sem.createI2PExposure(containerID, networkID, containerIP, port)
 		}
 
 		if err != nil {
@@ -787,8 +787,8 @@ func (sem *ServiceExposureManager) ExposeServices(containerID string, networkID 
 	return exposures, nil
 }
 
-// createServiceExposure creates a single I2P service exposure.
-func (sem *ServiceExposureManager) createServiceExposure(containerID string, networkID string, containerIP net.IP, port ExposedPort) (*ServiceExposure, error) {
+// createExposure creates a single I2P service exposure.
+func (sem *ExposureManager) createExposure(containerID string, networkID string, containerIP net.IP, port ExposedPort) (*Exposure, error) {
 	// Generate unique tunnel name
 	tunnelName := fmt.Sprintf("%s-%s-%d", containerID, port.ServiceName, port.ContainerPort)
 
@@ -816,7 +816,7 @@ func (sem *ServiceExposureManager) createServiceExposure(containerID string, net
 		return nil, fmt.Errorf("failed to generate .b32.i2p address: %w", err)
 	}
 
-	return &ServiceExposure{
+	return &Exposure{
 		ContainerID: containerID,
 		Port:        port,
 		Tunnel:      tunnel,
@@ -830,7 +830,7 @@ func (sem *ServiceExposureManager) createServiceExposure(containerID string, net
 // I2P .b32.i2p addresses are derived by SHA-256 hashing the raw destination
 // bytes (decoded from base64), then base32-encoding all 32 hash bytes to
 // produce a 52-character address per the I2P specification.
-func (sem *ServiceExposureManager) generateB32Address(destination string) (string, error) {
+func (sem *ExposureManager) generateB32Address(destination string) (string, error) {
 	if destination == "" {
 		return "", fmt.Errorf("destination cannot be empty")
 	}
@@ -854,7 +854,7 @@ func (sem *ServiceExposureManager) generateB32Address(destination string) (strin
 }
 
 // GetServiceExposures returns all service exposures for a container.
-func (sem *ServiceExposureManager) GetServiceExposures(containerID string) []*ServiceExposure {
+func (sem *ExposureManager) GetServiceExposures(containerID string) []*Exposure {
 	sem.mutex.RLock()
 	defer sem.mutex.RUnlock()
 
@@ -864,7 +864,7 @@ func (sem *ServiceExposureManager) GetServiceExposures(containerID string) []*Se
 	}
 
 	// Return a copy to prevent external modification
-	result := make([]*ServiceExposure, len(exposures))
+	result := make([]*Exposure, len(exposures))
 	copy(result, exposures)
 	return result
 }
@@ -873,7 +873,7 @@ func (sem *ServiceExposureManager) GetServiceExposures(containerID string) []*Se
 //
 // This method should be called when a container is being removed to clean up
 // associated I2P server tunnels and free resources.
-func (sem *ServiceExposureManager) CleanupServices(containerID string) error {
+func (sem *ExposureManager) CleanupServices(containerID string) error {
 	if containerID == "" {
 		return fmt.Errorf("container ID cannot be empty")
 	}
@@ -918,7 +918,7 @@ func (sem *ServiceExposureManager) CleanupServices(containerID string) error {
 }
 
 // Shutdown gracefully shuts down the service exposure manager.
-func (sem *ServiceExposureManager) Shutdown() error {
+func (sem *ExposureManager) Shutdown() error {
 	sem.cancel()
 
 	sem.mutex.Lock()
@@ -937,6 +937,6 @@ func (sem *ServiceExposureManager) Shutdown() error {
 		return fmt.Errorf("shutdown errors: %s", strings.Join(errors, "; "))
 	}
 
-	log.Printf("ServiceExposureManager shutdown complete")
+	log.Printf("ExposureManager shutdown complete")
 	return nil
 }

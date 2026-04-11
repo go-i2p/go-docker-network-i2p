@@ -207,13 +207,13 @@ func TestI2PDNSResolver_generateI2PIP(t *testing.T) {
 	}
 }
 
-func TestDefaultProxyConfig(t *testing.T) {
+func TestDefaultConfig(t *testing.T) {
 	_, subnet, err := net.ParseCIDR("172.20.0.0/16")
 	if err != nil {
 		t.Fatalf("Failed to parse test subnet: %v", err)
 	}
 
-	config := DefaultProxyConfig(subnet)
+	config := DefaultConfig(subnet)
 
 	if config.ContainerSubnet.String() != subnet.String() {
 		t.Errorf("Expected subnet %s, got %s", subnet.String(), config.ContainerSubnet.String())
@@ -236,13 +236,13 @@ func TestDefaultProxyConfig(t *testing.T) {
 	}
 }
 
-func TestNewProxyManager(t *testing.T) {
+func TestNewManager(t *testing.T) {
 	_, subnet, err := net.ParseCIDR("172.20.0.0/16")
 	if err != nil {
 		t.Fatalf("Failed to parse test subnet: %v", err)
 	}
 
-	config := DefaultProxyConfig(subnet)
+	config := DefaultConfig(subnet)
 
 	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
 	if err != nil {
@@ -250,7 +250,7 @@ func TestNewProxyManager(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager := NewProxyManager(config, tunnelMgr)
+	manager := NewManager(config, tunnelMgr)
 
 	if manager.config != config {
 		t.Error("Expected config to be set correctly")
@@ -265,7 +265,7 @@ func TestNewProxyManager(t *testing.T) {
 	}
 }
 
-/*func TestProxyManager_Lifecycle(t *testing.T) {
+/*func TestManager_Lifecycle(t *testing.T) {
 	// This test requires root privileges for iptables, so we'll test the basic lifecycle
 	// and expect iptables operations to fail gracefully
 
@@ -274,7 +274,7 @@ func TestNewProxyManager(t *testing.T) {
 		t.Fatalf("Failed to parse test subnet: %v", err)
 	}
 
-	config := DefaultProxyConfig(subnet)
+	config := DefaultConfig(subnet)
 	config.SOCKSBindAddr = "127.0.0.1:10801" // Use non-privileged port
 	config.DNSBindAddr = "127.0.0.1:5353"    // Use non-privileged port
 
@@ -284,7 +284,7 @@ func TestNewProxyManager(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager := NewProxyManager(config, tunnelMgr)
+	manager := NewManager(config, tunnelMgr)
 
 	// Test start (will fail due to iptables, but that's expected)
 	err = manager.Start()
@@ -421,13 +421,13 @@ func TestSOCKSProxy_TrafficFilterIntegration(t *testing.T) {
 	}
 }
 
-func TestProxyManager_TrafficFilterIntegration(t *testing.T) {
+func TestManager_TrafficFilterIntegration(t *testing.T) {
 	_, subnet, err := net.ParseCIDR("172.20.0.0/16")
 	if err != nil {
 		t.Fatalf("Failed to parse test subnet: %v", err)
 	}
 
-	config := DefaultProxyConfig(subnet)
+	config := DefaultConfig(subnet)
 
 	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
 	if err != nil {
@@ -435,7 +435,7 @@ func TestProxyManager_TrafficFilterIntegration(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager := NewProxyManager(config, tunnelMgr)
+	manager := NewManager(config, tunnelMgr)
 
 	// Test traffic filter initialization
 	filter := manager.GetTrafficFilter()

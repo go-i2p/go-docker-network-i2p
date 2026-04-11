@@ -104,9 +104,9 @@ func (t *TrafficInterceptor) generateIptablesRules() []string {
 		fmt.Sprintf("-t nat -A I2P_REDIRECT -s %s -p tcp ! --dport %d -j REDIRECT --to-port %d",
 			subnet, t.proxyPort, t.proxyPort),
 
-		// Apply I2P_REDIRECT chain to FORWARD traffic from containers
-		// Note: Container traffic goes through FORWARD chain, not OUTPUT (which is for host-generated traffic)
-		fmt.Sprintf("-t nat -A FORWARD -s %s -j I2P_REDIRECT", subnet),
+		// Apply I2P_REDIRECT chain to container traffic entering the host
+		// Note: Container traffic enters via PREROUTING chain in the nat table, not FORWARD
+		fmt.Sprintf("-t nat -A PREROUTING -s %s -j I2P_REDIRECT", subnet),
 
 		// Create custom chain for traffic filtering
 		"-t filter -N I2P_FILTER",

@@ -10,7 +10,7 @@ import (
 	"github.com/go-i2p/go-docker-network-i2p/pkg/i2p"
 )
 
-func TestNewServiceExposureManager(t *testing.T) {
+func TestNewExposureManager(t *testing.T) {
 	// Create a mock tunnel manager
 	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
 	if err != nil {
@@ -40,7 +40,7 @@ func TestNewServiceExposureManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, err := NewServiceExposureManager(tt.tunnelMgr)
+			manager, err := NewExposureManager(tt.tunnelMgr)
 
 			if tt.shouldError {
 				if err == nil {
@@ -67,7 +67,7 @@ func TestDetectExposedPorts(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestParsePortSpec(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestParseEnvironmentPort(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestGenerateB32Address(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestExposeServices(t *testing.T) {
 	defer samClient.Disconnect()
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -480,7 +480,7 @@ func TestGetServiceExposures(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestCleanupServices(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -552,7 +552,7 @@ func TestShutdown(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -572,7 +572,7 @@ func BenchmarkGenerateB32Address(b *testing.B) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		b.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -595,7 +595,7 @@ func BenchmarkDetectExposedPorts(b *testing.B) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		b.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -630,7 +630,7 @@ func TestParseExposureLabel(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -798,7 +798,7 @@ func TestExtractPortsFromLabels(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -963,7 +963,7 @@ func BenchmarkParseExposureLabel(b *testing.B) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		b.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -982,7 +982,7 @@ func BenchmarkExtractPortsFromLabels(b *testing.B) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		b.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1010,7 +1010,7 @@ func TestDetectExposedPortsWithLabels(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1224,7 +1224,7 @@ func TestIsPortConfigured(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1289,15 +1289,15 @@ func TestIsPortConfigured(t *testing.T) {
 	}
 }
 
-// TestCreateIPServiceExposure tests IP-based service exposure creation.
-func TestCreateIPServiceExposure(t *testing.T) {
+// TestCreateIPExposure tests IP-based service exposure creation.
+func TestCreateIPExposure(t *testing.T) {
 	samClient, err := i2p.NewSAMClient(i2p.DefaultSAMConfig())
 	if err != nil {
 		t.Fatalf("Failed to create SAM client: %v", err)
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1309,7 +1309,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 		name        string
 		port        ExposedPort
 		shouldError bool
-		validate    func(t *testing.T, exposure *ServiceExposure, err error)
+		validate    func(t *testing.T, exposure *Exposure, err error)
 	}{
 		{
 			name: "valid IP exposure with explicit target",
@@ -1321,7 +1321,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 				TargetIP:      "127.0.0.1",
 			},
 			shouldError: false,
-			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+			validate: func(t *testing.T, exposure *Exposure, err error) {
 				if err != nil {
 					t.Fatalf("Expected no error, got: %v", err)
 				}
@@ -1359,7 +1359,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 				TargetIP:      "", // Empty - should default
 			},
 			shouldError: false,
-			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+			validate: func(t *testing.T, exposure *Exposure, err error) {
 				if err != nil {
 					t.Fatalf("Expected no error, got: %v", err)
 				}
@@ -1382,7 +1382,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 				TargetIP:      "0.0.0.0",
 			},
 			shouldError: false,
-			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+			validate: func(t *testing.T, exposure *Exposure, err error) {
 				if err != nil {
 					t.Fatalf("Expected no error, got: %v", err)
 				}
@@ -1405,7 +1405,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 				TargetIP:      "::1",
 			},
 			shouldError: false,
-			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+			validate: func(t *testing.T, exposure *Exposure, err error) {
 				if err != nil {
 					t.Fatalf("Expected no error, got: %v", err)
 				}
@@ -1428,7 +1428,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 				TargetIP:      "invalid-ip",
 			},
 			shouldError: true,
-			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+			validate: func(t *testing.T, exposure *Exposure, err error) {
 				if err == nil {
 					t.Error("Expected error for invalid IP address")
 				}
@@ -1450,7 +1450,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 				TargetIP:      "127.0.0.1",
 			},
 			shouldError: false,
-			validate: func(t *testing.T, exposure *ServiceExposure, err error) {
+			validate: func(t *testing.T, exposure *Exposure, err error) {
 				if err != nil {
 					t.Fatalf("Expected no error, got: %v", err)
 				}
@@ -1467,7 +1467,7 @@ func TestCreateIPServiceExposure(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			exposure, err := manager.createIPServiceExposure(containerID, containerIP, tt.port)
+			exposure, err := manager.createIPExposure(containerID, containerIP, tt.port)
 			tt.validate(t, exposure, err)
 		})
 	}
@@ -1488,7 +1488,7 @@ func TestExposeServicesWithMixedTypes(t *testing.T) {
 	defer samClient.Disconnect()
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1595,7 +1595,7 @@ func TestExposeServicesDefaultType(t *testing.T) {
 	defer samClient.Disconnect()
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1646,7 +1646,7 @@ func TestUDPPortForwarding(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1663,7 +1663,7 @@ func TestUDPPortForwarding(t *testing.T) {
 		TargetIP:      "127.0.0.1",
 	}
 
-	exposure, err := manager.createIPServiceExposure(containerID, containerIP, port)
+	exposure, err := manager.createIPExposure(containerID, containerIP, port)
 	if err != nil {
 		t.Fatalf("Failed to create UDP exposure: %v", err)
 	}
@@ -1695,7 +1695,7 @@ func TestTCPAndUDPMixedForwarding(t *testing.T) {
 	}
 
 	tunnelMgr := i2p.NewTunnelManager(samClient)
-	manager, err := NewServiceExposureManager(tunnelMgr)
+	manager, err := NewExposureManager(tunnelMgr)
 	if err != nil {
 		t.Fatalf("Failed to create service exposure manager: %v", err)
 	}
@@ -1732,10 +1732,10 @@ func TestTCPAndUDPMixedForwarding(t *testing.T) {
 		},
 	}
 
-	var exposures []*ServiceExposure
+	var exposures []*Exposure
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			exposure, err := manager.createIPServiceExposure(containerID, containerIP, tt.port)
+			exposure, err := manager.createIPExposure(containerID, containerIP, tt.port)
 			if err != nil {
 				t.Fatalf("Failed to create exposure: %v", err)
 			}
