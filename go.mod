@@ -3,17 +3,17 @@ module github.com/go-i2p/go-docker-network-i2p
 go 1.26.3
 
 require (
-	github.com/go-i2p/common v0.1.59999
-	github.com/go-i2p/go-forward v0.0.0-20260908191756-4485ca6c256d
+	github.com/go-i2p/common v0.1.60000-0.20260701134558-e5f5cf65a7f5
+	github.com/go-i2p/go-forward v0.0.0-20260908194502-3ca725bfc242
 	github.com/go-i2p/go-sam-go v0.33.1
 	github.com/miekg/dns v1.1.73
 )
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/go-i2p/crypto v0.1.59999 // indirect
+	github.com/go-i2p/crypto v0.1.60000-0.20260701135847-3ade996b68a0 // indirect
 	github.com/go-i2p/i2pkeys v0.33.92 // indirect
-	github.com/go-i2p/logger v0.1.59999 // indirect
+	github.com/go-i2p/logger v0.1.60000-0.20260701134448-2648c3b0e040 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/samber/lo v1.53.0 // indirect
 	github.com/samber/oops v1.23.1 // indirect
