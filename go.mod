@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/go-i2p/common v0.1.60000-0.20260701134558-e5f5cf65a7f5
-	github.com/go-i2p/go-forward v0.0.0-20260908194502-3ca725bfc242
+	github.com/go-i2p/go-forward v0.0.0-20260908205159-b32a1ef9df93
 	github.com/go-i2p/go-sam-go v0.33.1
 	github.com/miekg/dns v1.1.73
 )

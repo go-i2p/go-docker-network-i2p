@@ -4,8 +4,8 @@ github.com/go-i2p/common v0.1.60000-0.20260701134558-e5f5cf65a7f5 h1:bseTqmqftT/
 github.com/go-i2p/common v0.1.60000-0.20260701134558-e5f5cf65a7f5/go.mod h1:a0sW2Q7N14cAxX+/KijWisaZ3BNUQJZyxvsZEADPN9o=
 github.com/go-i2p/crypto v0.1.60000-0.20260701135847-3ade996b68a0 h1:rfVnbHfeTMEGto3hUhEHpqFS3EU/COGDntCtq0T6T4c=
 github.com/go-i2p/crypto v0.1.60000-0.20260701135847-3ade996b68a0/go.mod h1:W9U1KpOk0yp2DsybM8zA0rBVCiqfK/9QkBqosegXkfA=
-github.com/go-i2p/go-forward v0.0.0-20260908194502-3ca725bfc242 h1:2r6RtV6Y4wP1x7tFtzCgiO6qm0HGMQOXKNKkZmYg55s=
-github.com/go-i2p/go-forward v0.0.0-20260908194502-3ca725bfc242/go.mod h1:sy+gvOFyqBL3g5G3AXxropt6+8rs/DmIG8FJEFCNxzc=
+github.com/go-i2p/go-forward v0.0.0-20260908205159-b32a1ef9df93 h1:VM4EmLd1NJTmnD8Y9TCgJZ5VQBOUJNc/zw7LvcmxxEU=
+github.com/go-i2p/go-forward v0.0.0-20260908205159-b32a1ef9df93/go.mod h1:48SQse8SqHfBLM/Izf008KQ7dUlo22x0EeGdPPNz4rQ=
 github.com/go-i2p/go-sam-go v0.33.1 h1:WHG6874v/1DbfDv8qHSZyWrKCv7ZIVqeTI0HcX67cEE=
 github.com/go-i2p/go-sam-go v0.33.1/go.mod h1:e8jYKXMLQJ0YuWB0urWutmmyziLx95tmNF6oLPLFUo8=
 github.com/go-i2p/i2pkeys v0.33.92 h1:e2vx3vf7tNesaJ8HmAlGPOcfiGM86jzeIGxh27I9J2Y=
